@@ -5,30 +5,34 @@ const GLYPHS = 'abcdefghkmnoprsuvwxz0123456789';
 const reduced = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 // Text that decrypts itself: random glyphs settle into the real string.
-export function Scramble({ text, as: Tag = 'span', className, delay = 0, speed = 32 }) {
+export function Scramble({ text, as: Tag = 'span', className, delay = 0, duration = 1100 }) {
   const [out, setOut] = useState(reduced() ? text : text.replace(/\S/g, 'x'));
   useEffect(() => {
     if (reduced()) return setOut(text);
-    let frame = 0;
     let iv;
+    let start = 0;
     const t0 = setTimeout(() => {
+      start = performance.now();
+      // Time-based, so a busy main thread can't leave it half-scrambled.
       iv = setInterval(() => {
-        frame++;
-        const done = Math.floor(frame / 2);
+        const done = Math.floor(((performance.now() - start) / duration) * text.length);
         let s = '';
         for (let i = 0; i < text.length; i++) {
           const ch = text[i];
           s += ch === ' ' || i < done ? ch : GLYPHS[(Math.random() * GLYPHS.length) | 0];
         }
         setOut(s);
-        if (done >= text.length) clearInterval(iv);
-      }, speed);
+        if (done >= text.length) {
+          clearInterval(iv);
+          setOut(text);
+        }
+      }, 40);
     }, delay);
     return () => {
       clearTimeout(t0);
       clearInterval(iv);
     };
-  }, [text, delay, speed]);
+  }, [text, delay, duration]);
   return (
     <Tag className={className} aria-label={text}>
       <span aria-hidden="true">{out}</span>
@@ -178,11 +182,21 @@ export function eventText(e, cfg) {
   }
 }
 
+const TAGS = { buy: 'BUY', sell: 'SELL', claim: 'FEES', buyback: 'BUYBACK', payout: 'PAID' };
+
+function hhmmss(ts) {
+  const d = new Date(ts);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
+}
+
+// Dark mono pill that scrolls the latest real on-chain events.
 export function Marquee({ events, cfg }) {
   if (!events.length) {
     return (
-      <div className="marquee marquee-empty">
-        <span className="dot" /> Live feed starts with the first on-chain trade. Every line will link to its Solana transaction.
+      <div className="ticker-wrap">
+        <div className="ticker ticker-empty">
+          <span className="rec" /> <span className="pixel">STANDBY</span> live feed starts with the first on-chain trade. every line links to its solana transaction.
+        </div>
       </div>
     );
   }
@@ -190,16 +204,23 @@ export function Marquee({ events, cfg }) {
   const row = items.map((e) => {
     const t = eventText(e, cfg);
     return (
-      <a key={e.id} href={solscanTx(e.sig)} target="_blank" rel="noreferrer" className={`mq-item k-${e.kind}`}>
-        <b>{t.tag}</b> {t.text}
+      <a key={e.id} href={solscanTx(e.sig)} target="_blank" rel="noreferrer" className={`tk-item k-${e.kind}`}>
+        <b className="pixel">{t.tag}</b> {t.text}
       </a>
     );
   });
   return (
-    <div className="marquee" role="marquee" aria-label="Recent on-chain activity">
-      <div className="mq-track" style={{ '--n': items.length }}>
-        {row}
-        {row.map((r) => ({ ...r, key: r.key + '-dup' }))}
+    <div className="ticker-wrap">
+      <div className="ticker" role="marquee" aria-label="Recent on-chain activity">
+        <span className="ticker-live">
+          <span className="rec" /> <span className="pixel">LIVE</span>
+        </span>
+        <div className="tk-mask">
+          <div className="tk-track" style={{ '--n': items.length }}>
+            {row}
+            {row.map((r) => ({ ...r, key: r.key + '-dup' }))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -212,9 +233,12 @@ export function Toasts({ items, cfg }) {
         const t = eventText(e, cfg);
         return (
           <a key={e.id} className={`toast k-${e.kind}`} href={solscanTx(e.sig)} target="_blank" rel="noreferrer">
-            <b>{t.tag}</b>
-            <span>{t.text}</span>
-            <small>verified on Solana ↗</small>
+            <span className="toast-top">
+              <b className="pixel">{t.tag}</b>
+              <span className="pixel muted">{hhmmss(e.ts)}</span>
+            </span>
+            <span className="toast-text">{t.text}</span>
+            <small className="pixel">verified on solana ↗</small>
           </a>
         );
       })}
@@ -222,17 +246,53 @@ export function Toasts({ items, cfg }) {
   );
 }
 
-export function FeedTable({ events, cfg, empty }) {
-  if (!events.length) return <div className="empty">{empty}</div>;
+// A terminal window: traffic-light dots, a title and optional tabs.
+export function Win({ title, tabs, tab, onTab, right, children, className = '' }) {
   return (
-    <ul className="feed">
+    <div className={`win ${className}`}>
+      <div className="win-bar">
+        <span className="win-dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        <span className="win-title">{title}</span>
+        {tabs && (
+          <span className="win-tabs" role="tablist">
+            {tabs.map((t) => (
+              <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => onTab(t)}>
+                {t}
+              </button>
+            ))}
+          </span>
+        )}
+        {right && <span className="win-right">{right}</span>}
+      </div>
+      <div className="win-body">{children}</div>
+    </div>
+  );
+}
+
+// Activity as a terminal log.
+export function FeedTable({ events, cfg, empty }) {
+  if (!events.length)
+    return (
+      <div className="log-empty">
+        <span className="pixel">$ tail -f vault.log</span>
+        <span>{empty}</span>
+        <span className="cursor">▮</span>
+      </div>
+    );
+  return (
+    <ul className="log">
       {events.slice(0, 30).map((e) => {
         const t = eventText(e, cfg);
         return (
-          <li key={e.id} className={`feed-row k-${e.kind} enter`}>
-            <span className="feed-tag">{t.tag}</span>
-            <span className="feed-text">{t.text}</span>
-            <a className="feed-link mono" href={solscanTx(e.sig)} target="_blank" rel="noreferrer">
+          <li key={e.id} className={`log-row k-${e.kind} enter`}>
+            <span className="log-ts">{hhmmss(e.ts)}</span>
+            <span className="log-tag pixel">{TAGS[e.kind] || t.tag}</span>
+            <span className="log-text">{t.text}</span>
+            <a className="log-link" href={solscanTx(e.sig)} target="_blank" rel="noreferrer">
               {ago(e.ts)} ↗
             </a>
           </li>
@@ -240,6 +300,78 @@ export function FeedTable({ events, cfg, empty }) {
       })}
     </ul>
   );
+}
+
+// Big puffy wordmark: solid face, stacked extrusion, glossy highlight.
+export function Wordmark({ text, className = '' }) {
+  return (
+    <span className={`wordmark ${className}`} data-text={text}>
+      {text}
+    </span>
+  );
+}
+
+// A field of glyphs that slowly re-encrypts itself. Pure 2D canvas, cheap.
+export function AsciiField({ className = '', density = 14, chars = '01<>/\\|=+*#%@$&' }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    let w = 0;
+    let h = 0;
+    let cols = 0;
+    let rows = 0;
+    let grid = [];
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const color = getComputedStyle(cv).color;
+    const size = () => {
+      const r = cv.getBoundingClientRect();
+      w = r.width;
+      h = r.height;
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cols = Math.ceil(w / (density * 0.62));
+      rows = Math.ceil(h / density);
+      grid = Array.from({ length: cols * rows }, () => chars[(Math.random() * chars.length) | 0]);
+    };
+    size();
+    const ro = new ResizeObserver(size);
+    ro.observe(cv);
+    let visible = true;
+    const io = new IntersectionObserver(([en]) => (visible = en.isIntersecting));
+    io.observe(cv);
+    let raf = 0;
+    const t0 = performance.now();
+    const draw = (now) => {
+      raf = requestAnimationFrame(draw);
+      if (!visible || document.hidden) return;
+      const t = (now - t0) / 1000;
+      for (let k = 0; k < cols * rows * 0.02; k++) grid[(Math.random() * grid.length) | 0] = chars[(Math.random() * chars.length) | 0];
+      ctx.clearRect(0, 0, w, h);
+      ctx.font = `${density}px "IBM Plex Mono", monospace`;
+      ctx.fillStyle = color;
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const wave = Math.sin(x * 0.18 + t * 0.9) * Math.cos(y * 0.22 - t * 0.6);
+          const a = Math.max(0, wave) * 0.9;
+          if (a < 0.08) continue;
+          ctx.globalAlpha = a;
+          ctx.fillText(grid[y * cols + x], x * density * 0.62, (y + 1) * density);
+        }
+      }
+      ctx.globalAlpha = 1;
+    };
+    if (reduced()) draw(t0 + 1500);
+    else raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      io.disconnect();
+    };
+  }, [density, chars]);
+  return <canvas ref={ref} className={`ascii-field ${className}`} aria-hidden="true" />;
 }
 
 export function WalletLink({ address }) {
