@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { ago, fmtNum, rawToUi, short, solscanAcct, solscanTx } from './api.js';
 
-const GLYPHS = '01#$%&*+<>/\\=?@ABCDEFXZ█▓▒░';
+const GLYPHS = 'abcdefghkmnoprsuvwxz0123456789';
 const reduced = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 // Text that decrypts itself: random glyphs settle into the real string.
 export function Scramble({ text, as: Tag = 'span', className, delay = 0, speed = 32 }) {
-  const [out, setOut] = useState(reduced() ? text : text.replace(/\S/g, '\u2588'));
+  const [out, setOut] = useState(reduced() ? text : text.replace(/\S/g, 'x'));
   useEffect(() => {
     if (reduced()) return setOut(text);
     let frame = 0;
