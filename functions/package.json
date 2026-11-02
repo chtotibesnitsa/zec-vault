@@ -1,0 +1,22 @@
+{
+  "name": "privacy-vault-api",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "vitest run test/engine.test.js && node --test test/cycle.node.mjs",
+    "build": "wrangler deploy --dry-run --outdir dist"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0"
+  },
+  "devDependencies": {
+    "@solana/kit": "^8.6.0",
+    "litesvm": "^1.6.1",
+    "vitest": "^3.2.7",
+    "wrangler": "^4.156.1"
+  },
+  "private": true,
+  "type": "module"
+}

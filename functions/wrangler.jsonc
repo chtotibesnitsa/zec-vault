@@ -1,0 +1,13 @@
+{
+  // Deployed from the Cloudflare dashboard: Workers & Pages -> Import a repository,
+  // root directory "functions". Secrets are set in the dashboard, never here.
+  "name": "zec-vault-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "keep_vars": true,
+  "triggers": { "crons": ["* * * * *"] },
+  "durable_objects": { "bindings": [{ "name": "VAULT", "class_name": "Vault" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Vault"] }],
+  "observability": { "enabled": true }
+}
