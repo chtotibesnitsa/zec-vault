@@ -13,7 +13,9 @@ import '@fontsource/ibm-plex-mono/500.css';
 import '@fontsource/ibm-plex-mono/600.css';
 import '@fontsource/vt323/400.css';
 import './styles.css';
+import './v5.css';
 import './trailer.css';
+import { HYPE, hypeMusic } from './hype.jsx';
 import { brand, fill } from './brand.js';
 import { Wordmark } from './components.jsx';
 import { Px } from './pixel.jsx';
@@ -522,25 +524,28 @@ const EndScene = {
 };
 
 const CUTS = {
+  hype: HYPE,
   teaser: [Boot, HeroScene, WordScene, FeesScene, PayoutScene, FeaturesScene, EndScene],
   explainer: [Boot, { ...HeroScene, dur: 4.6 }, { ...WordScene, dur: 3.6 }, StepsScene, { ...FeesScene, dur: 5.5 }, { ...PayoutScene, dur: 4.8 }, ProofScene, { ...FeaturesScene, dur: 6.6 }, { ...EndScene, dur: 4.0 }],
 };
 
 const q = new URLSearchParams(window.location.search);
-const cut = CUTS[q.get('cut')] || CUTS.teaser;
+const cutName = CUTS[q.get('cut')] ? q.get('cut') : 'teaser';
+const cut = CUTS[cutName];
 const starts = [];
 let total = 0;
 for (const s of cut) {
   starts.push(total);
   total += s.dur;
 }
-const cues = cut.flatMap((s, i) => [...s.cues(s.dur).map(([ct, k]) => [+(starts[i] + ct).toFixed(3), k]), ...(i ? [[+(starts[i] - 0.18).toFixed(3), 'wipe']] : [])]).sort((a, b) => a[0] - b[0]);
+const cues = cut.flatMap((s, i) => [...s.cues(s.dur).map(([ct, k]) => [+(starts[i] + ct).toFixed(3), k]), ...(i && !s.hard ? [[+(starts[i] - 0.18).toFixed(3), 'wipe']] : [])]).concat(cutName === 'hype' ? hypeMusic() : []).sort((a, b) => a[0] - b[0]);
 
 const CELLS = Array.from({ length: 16 * 9 }, (_, i) => hash(i * 3.7));
 function Wipe({ t }) {
   // pixel dissolve around each scene boundary
   let p = 0;
-  for (const b of starts.slice(1)) {
+  for (const [k, b] of starts.entries()) {
+    if (!k || cut[k].hard) continue;
     const x = (t - (b - 0.22)) / 0.44;
     if (x > 0 && x < 1) p = x;
   }
@@ -578,6 +583,7 @@ function App() {
   useLayoutEffect(() => {
     const r = document.documentElement;
     r.dataset.theme = brand.theme;
+    r.dataset.vault = brand.key;
     r.style.setProperty('--accent', brand.accent);
     r.style.setProperty('--accent2', brand.accent2);
     r.style.setProperty('--accent-deep', brand.accentDeep);

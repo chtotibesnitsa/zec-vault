@@ -88,3 +88,60 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
 
 .tr-proof .tr-log { min-height: 0; }
 .tr-proof { gap: 60px; }
+
+/* ---------- hype cut ---------- */
+.hy-black { background: #050505; color: #f2efe8; --ink: #f2efe8; --muted: #8c8882; --line: rgba(255, 255, 255, 0.09); --line2: rgba(255, 255, 255, 0.18); --card: #111113; --card2: #18181b; --bg2: #0c0c0e; }
+.hy-flash { position: absolute; inset: 0; background: #fff; pointer-events: none; z-index: 20; mix-blend-mode: screen; }
+.hy-preview { position: absolute; right: 48px; bottom: 40px; z-index: 15; font-size: 24px; color: rgba(255, 255, 255, 0.55); border: 1px dashed rgba(255, 255, 255, 0.35); border-radius: 8px; padding: 6px 12px 4px; }
+.hy-cmd { font-size: 56px; width: 1300px; display: grid; gap: 30px; }
+.hy-caret { color: var(--accent); }
+.hy-blocks { display: grid; grid-template-columns: repeat(24, 1fr); gap: 8px; }
+.hy-blocks i { height: 40px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); }
+.hy-blocks i.on { background: var(--accent); box-shadow: 0 0 24px var(--glow); }
+.hy-status { font-size: 44px; color: var(--accent); }
+.hy-word { background: #050505; color: #f2efe8; }
+.hy-word.inv { background: var(--accent); color: #0a0705; }
+.hy-big { font-family: var(--display); font-variation-settings: 'wdth' 150; font-weight: 900; font-size: 260px; line-height: 0.9; letter-spacing: -0.02em; text-transform: uppercase; text-align: center; white-space: nowrap; }
+.hy-big-2 { font-size: 190px; }
+.hy-vp { width: 1920px; height: 1080px; border: 0; border-radius: 0; }
+.hy-vp .hero3d { --lens: 260px; }
+.hy-coin-title { position: absolute; left: 120px; bottom: 110px; z-index: 6; font-family: var(--display); font-variation-settings: 'wdth' 140; font-weight: 900; font-size: 180px; line-height: 0.9; text-transform: uppercase; text-shadow: 0 10px 0 rgba(0, 0, 0, 0.6), 0 0 60px rgba(0, 0, 0, 0.9); transform-origin: left bottom; }
+.hy-coin-title > div { transform-origin: left bottom; }
+.hy-sub { font-size: 76px; color: #d8d3ca; margin-top: 16px; }
+.hy-gold { background: radial-gradient(70% 70% at 50% 50%, color-mix(in srgb, var(--accent) 35%, #050505), #050505 75%); color: #fff; overflow: hidden; }
+.hy-rays { position: absolute; width: 3000px; height: 3000px; left: 50%; top: 50%; margin: -1500px 0 0 -1500px; background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--accent) 22%, transparent) 0 6deg, transparent 6deg 18deg); -webkit-mask-image: radial-gradient(closest-side, #000, transparent 80%); mask-image: radial-gradient(closest-side, #000, transparent 80%); }
+.hy-rays.dim { opacity: 0.35; }
+.hy-coins { position: absolute; inset: 0; }
+.hy-coins i { position: absolute; top: 0; width: 64px; height: 64px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, var(--accent2), var(--accent) 55%, var(--accent-deep)); box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.3), 0 0 30px var(--glow); }
+.hy-money { position: relative; z-index: 3; display: grid; justify-items: center; gap: 6px; text-align: center; }
+.hy-label { font-size: 56px; color: var(--accent2); }
+.hy-num { font-size: 230px; font-weight: 600; line-height: 1; letter-spacing: -0.04em; background: linear-gradient(180deg, #fff6d8, var(--accent2) 35%, var(--accent) 70%, var(--accent-deep)); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 40px var(--glow)); white-space: nowrap; }
+.hy-tk { font-size: 0.42em; }
+.hy-usd { font-size: 96px; color: #7dff9b; text-shadow: 0 0 30px rgba(125, 255, 155, 0.45); }
+.hy-stamp { position: absolute; z-index: 8; left: -40px; top: -150px; font-family: var(--display); font-variation-settings: 'wdth' 140; font-weight: 900; font-size: 84px; padding: 6px 28px 2px; border: 8px solid #fff; color: #fff; border-radius: 12px; text-transform: uppercase; background: rgba(0, 0, 0, 0.35); white-space: nowrap; }
+.hy-stamp.s2 { left: auto; right: -40px; top: auto; bottom: -170px; border-color: var(--accent2); color: var(--accent2); }
+.hy-ring { position: absolute; width: 900px; height: 900px; }
+.hy-split { position: relative; display: grid; justify-items: center; gap: 4px; }
+.hy-split b { font-size: 240px; font-weight: 600; line-height: 1; letter-spacing: -0.04em; }
+.hy-split span { font-family: var(--display); font-variation-settings: 'wdth' 140; font-weight: 900; font-size: 64px; text-transform: uppercase; }
+.hy-swap-title { position: absolute; top: 90px; font-family: var(--display); font-variation-settings: 'wdth' 140; font-weight: 900; font-size: 110px; text-transform: uppercase; }
+.hy-zero { color: #7dff9b; }
+.hy-swap { width: 520px; margin-top: 170px; }
+.hy-swap .swap-row output { font-size: 34px; }
+.hy-swap .tk { pointer-events: none; }
+.hy-stamp-fee { left: auto; right: 70px; top: 660px; font-size: 96px !important; border-color: #7dff9b; color: #7dff9b; font-size: 120px; }
+.hy-flood { width: 1720px; display: grid; grid-template-columns: 1fr 640px; gap: 40px; align-items: center; }
+.hy-panel { font-size: 26px; }
+.hy-panel .lp-head b { font-size: 34px; }
+.hy-panel .lrow.move { grid-template-columns: 52px 130px 1fr; padding: 20px 26px; font-size: 30px; }
+.hy-panel .mv-ic { width: 52px; height: 52px; }
+.hy-panel .mv-tag { font-size: 30px; }
+.hy-k-buy, .hy-k-paid { color: #7dff9b !important; }
+.hy-k-burn { color: #ff3d2e !important; }
+.hy-k-sell { color: #ff5b6e !important; }
+.hy-burn { display: grid; gap: 10px; justify-items: start; }
+.hy-burn .pixel { font-size: 40px; color: #ff6b4e; display: inline-flex; gap: 10px; align-items: center; }
+.hy-burn b { font-size: 120px; font-weight: 600; letter-spacing: -0.03em; color: #ff3d2e; text-shadow: 0 0 50px rgba(255, 61, 46, 0.5); transform-origin: left center; }
+.hy-burn .mono:last-child { font-size: 48px; color: #ff9a85; }
+.hy-soon { font-family: var(--display); font-variation-settings: 'wdth' 150; font-weight: 900; font-size: 150px; line-height: 1; color: var(--accent); text-shadow: 0 0 60px var(--glow); white-space: nowrap; }
+.hy-end-facts { font-size: 40px; color: #bdb8af; }

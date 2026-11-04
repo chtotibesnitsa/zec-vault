@@ -110,6 +110,55 @@ def s_wipe():
     return 0.07 * sq * np.sin(np.linspace(0, np.pi, n)) + 0.25 * s_whoosh()[:n] * 0.5
 
 
+def s_kick():
+    n = int(0.42 * SR)
+    body = tone_sweep(150, 42, n) * env(n, 0.0008, 0.16)
+    click = rng.standard_normal(n) * env(n, 0.0002, 0.003)
+    return 1.0 * body + 0.18 * click
+
+
+def s_clap():
+    n = int(0.3 * SR)
+    x = rng.standard_normal(n)
+    x = x - lowpass(x, 900)
+    e = np.zeros(n)
+    for k, o in enumerate([0, 0.011, 0.022]):
+        i = int(o * SR)
+        e[i:] += env(n - i, 0.0005, 0.01 if k < 2 else 0.09)
+    return 0.42 * x * e
+
+
+def s_hat(r=0.03, amp=0.16):
+    n = int(0.12 * SR)
+    x = rng.standard_normal(n)
+    x = x - lowpass(x, 7000)
+    return amp * x * env(n, 0.0003, r)
+
+
+def s_crash():
+    n = int(2.2 * SR)
+    x = rng.standard_normal(n)
+    x = x - lowpass(x, 3500)
+    return 0.32 * x * env(n, 0.001, 0.7)
+
+
+def s_slam():
+    n = int(0.7 * SR)
+    sub = tone_sweep(90, 40, n) * env(n, 0.001, 0.22)
+    noise = lowpass(rng.standard_normal(n), 2500) * env(n, 0.0005, 0.06)
+    return 0.8 * sub + 0.45 * noise
+
+
+def s_bass(root, semis, beat):
+    n = int(beat * 0.95 * SR)
+    f = root * 2 * 2 ** (semis / 12)
+    t = np.arange(n) / SR
+    saw = 2 * ((f * t) % 1) - 1
+    x = lowpass(0.6 * saw + 0.5 * np.sin(2 * np.pi * f / 2 * t), 700)
+    # sidechain-style pump: quiet on the downbeat, swell to the offbeat
+    return 0.42 * x * env(n, 0.03, beat * 0.9)
+
+
 def drone(n, root):
     t = np.arange(n) / SR
     lfo = 0.5 + 0.5 * np.sin(2 * np.pi * 0.07 * t)
@@ -131,14 +180,20 @@ def main():
     chime_base = 880.0 if vault == 'xmr' else 987.77
     n = int((dur + 0.6) * SR)
     mix = np.zeros(n)
-    mix += drone(n, root)
+    beat = 60 / 128
+    if not any(k == 'nodrone' for _, k in cues):
+        mix += drone(n, root)
     gen = {
         'type': s_type, 'tick': s_tick, 'click': s_click, 'glitch': s_glitch, 'whoosh': s_whoosh,
         'riser': s_riser, 'hit': s_hit, 'chime': lambda: s_chime(chime_base), 'wipe': s_wipe,
+        'kick': s_kick, 'clap': s_clap, 'hat': s_hat, 'hat2': lambda: s_hat(0.012, 0.08), 'crash': s_crash, 'slam': s_slam,
     }
+    for _, k in cues:
+        if k.startswith('bass:') and k not in gen:
+            gen[k] = (lambda semis: lambda: s_bass(root, semis, beat))(int(k.split(':')[1]))
     cache = {}
     for t, kind in cues:
-        if kind == 'drone':
+        if kind in ('drone', 'nodrone'):
             continue
         if kind not in cache:
             cache[kind] = gen[kind]()

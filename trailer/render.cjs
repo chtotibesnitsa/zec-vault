@@ -1,7 +1,7 @@
 // Renders web/dist/trailer.html frame by frame at 60fps and muxes the
 // synthesized soundtrack. Needs Playwright (Chromium), ffmpeg and python3+numpy.
 //
-// usage: node render.cjs <built dist dir> <teaser|explainer> <out.mp4> <xmr|zec> [fps]
+// usage: node render.cjs <built dist dir> <hype|teaser|explainer> <out.mp4> <xmr|zec> [fps]
 const { chromium } = require('playwright');
 const { spawn, execFileSync } = require('child_process');
 const http = require('http');
