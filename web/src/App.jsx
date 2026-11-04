@@ -63,7 +63,7 @@ export default function App() {
   const preview = !realEvents.length && !cfg?.live;
   const sampleTick = useRef(0);
   const sampleEvents = useSampleFeed(preview, (e) => {
-    if (sampleTick.current++ % 3 === 0) pushToast(e);
+    if (sampleTick.current++ % 3 === 2) pushToast(e);
   });
   const events = realEvents.length ? realEvents : sampleEvents;
   const isApp = path.startsWith('/app');

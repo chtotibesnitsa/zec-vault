@@ -322,3 +322,9 @@ a.lrow[href]:hover { background: var(--card2); }
 /* older section heads follow each vault's type */
 .shead h2 { font-variation-settings: 'wdth' var(--wdth); font-weight: var(--h-weight); }
 [data-vault='zec'] .shead h2 { text-transform: none; }
+@media (max-width: 640px) {
+  .toasts { right: 10px; left: 10px; bottom: 10px; width: auto; }
+  .toast { padding: 8px 12px; gap: 2px; border-radius: 12px; }
+  .toast:not(:first-child) { display: none; }
+  .toast small { display: none; }
+}
