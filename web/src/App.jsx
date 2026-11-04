@@ -3,6 +3,7 @@ import { brand, fill } from './brand.js';
 import { api, fmtNum, fmtUsd, short, solscanAcct, solscanTx, ago, useFeed, usePoll } from './api.js';
 import { AsciiField, CopyChip, Countdown, Counter, Emblem, FeedTable, Marquee, Reveal, Scramble, Toasts, WalletLink, Win, Wordmark } from './components.jsx';
 import { Px } from './pixel.jsx';
+import { AccountButton, AuthProvider, InviteCopy, inviteLink, shareOnX, useAuth } from './auth.jsx';
 
 const Hero3D = lazy(() => import('./Hero3D.jsx'));
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -70,7 +71,14 @@ export default function App() {
     document.title = isApp ? `${brand.name} · vault` : `${brand.name} · ${brand.headline}`;
   }, [isApp]);
 
+  const [notice, setNotice] = useState('');
+  const notify = useCallback((m) => {
+    setNotice(m);
+    setTimeout(() => setNotice(''), 5000);
+  }, []);
+
   return (
+    <AuthProvider notify={notify}>
     <div className={`site v-${brand.key}`} style={{ "--n": brand.name.length }}>
       <div className="bg-grid" aria-hidden="true" />
       <StatusBar stats={stats.data} />
@@ -82,7 +90,9 @@ export default function App() {
       <Footer />
       <Toasts items={toasts} cfg={cfg} />
       <PixelWipe state={wipe} />
+      {notice && <div className="notice pixel">{notice}</div>}
     </div>
+    </AuthProvider>
   );
 }
 
@@ -142,9 +152,10 @@ function Nav({ go, isApp, cfg }) {
             buy ${brand.ticker}
           </a>
         )}
-        <a href={isApp ? '/' : '/app'} className="btn btn-sm" onClick={(e) => link(e, isApp ? '/' : '/app')}>
+        <a href={isApp ? '/' : '/app'} className="btn btn-sm hide-xs" onClick={(e) => link(e, isApp ? '/' : '/app')}>
           {isApp ? 'Home' : 'Open vault'}
         </a>
+        <AccountButton />
       </nav>
     </header>
   );
@@ -379,6 +390,12 @@ function Landing({ go, stats, events, cfg }) {
       </Reveal>
 
       <Reveal>
+        <section className="section" id="estimate">
+          <Estimator stats={s} />
+        </section>
+      </Reveal>
+
+      <Reveal>
         <section className="section" id="live">
           <SectionHead n={4} title="Every move, verifiable" right={<span className="muted small">each line links to its Solana transaction</span>} />
           <Win title={`${brand.key}-vault — tail -f`} tabs={['all', 'trades', 'payouts', 'vault']} tab={feedTab} onTab={setFeedTab}>
@@ -428,9 +445,14 @@ function Landing({ go, stats, events, cfg }) {
         <AsciiField className="closer-field" />
         <div className="closer-in">
           <Scramble as="h2" text={brand.closer} className="closer-h" />
-          <a href="/app" className="btn" onClick={(e) => (e.preventDefault(), go('/app'))}>
-            Open the vault
-          </a>
+          <div className="hero-cta center">
+            <a href="/app" className="btn" onClick={(e) => (e.preventDefault(), go('/app'))}>
+              Open the vault
+            </a>
+            <button className="btn btn-ghost" onClick={() => shareOnX(`${brand.headline} $${brand.ticker} pays holders every few minutes from real trading fees. No staking, no KYC.`, window.location.origin)}>
+              Share on X
+            </button>
+          </div>
         </div>
       </section>
     </main>
@@ -447,29 +469,67 @@ function Row({ k, v }) {
 }
 
 function TopEarners() {
-  const { data } = usePoll('/api/leaderboard', 30000);
+  const [tab, setTab] = useState('earners');
+  const earners = usePoll('/api/leaderboard', 30000).data;
+  const diamonds = usePoll(tab === 'diamond hands' ? '/api/diamonds' : null, 30000).data;
+  const recruiters = usePoll(tab === 'recruiters' ? '/api/referrals' : null, 30000).data;
   const cfgState = usePoll('/api/config', 60000);
   const d = cfgState.data?.rewardDecimals ?? 6;
-  const top = data?.top || [];
+  const { me } = useAuth();
+  let rows = [];
+  if (tab === 'earners')
+    rows = (earners?.top || []).slice(0, 10).map((r) => ({
+      key: r.wallet,
+      who: <WalletLink address={r.wallet} name={earners.profiles?.[r.wallet]} />,
+      value: fmtNum(Number(BigInt(r.paid_raw)) / 10 ** d, 4),
+      note: (
+        <>
+          {r.payouts} payouts {earners.streaks?.[r.wallet]?.neverSold && <span className="badge" title="Never sold">◆ diamond</span>}
+        </>
+      ),
+    }));
+  if (tab === 'diamond hands')
+    rows = (diamonds?.top || []).map((r) => ({
+      key: r.wallet,
+      who: <WalletLink address={r.wallet} name={diamonds.profiles?.[r.wallet]} />,
+      value: `${r.streak} payouts`,
+      note: r.neverSold ? 'never sold' : 'since last sell',
+    }));
+  if (tab === 'recruiters')
+    rows = (recruiters?.top || []).map((r) => ({
+      key: r.username,
+      who: r.wallet ? <WalletLink address={r.wallet} name={{ u: r.username, x: r.x }} /> : <span className="who">@{r.username}</span>,
+      value: `${r.recruits}`,
+      note: 'holders invited',
+    }));
+  const empty = {
+    earners: 'Fills in after the first payout.',
+    'diamond hands': 'Wallets that keep getting paid without selling show up here.',
+    recruiters: me?.username ? 'No invites yet. Share your link from My vault to top this board.' : 'Connect a wallet and pick a name to get your invite link.',
+  }[tab];
   return (
     <section className="section" id="earners">
-      <SectionHead n={5} title="Top earners" right={<span className="pixel muted">all-time payouts</span>} />
-      {top.length ? (
-        <ol className="earners card">
-          {top.slice(0, 10).map((r, i) => (
-            <li key={r.wallet}>
-              <span className={`rank pixel r${i + 1}`}>#{String(i + 1).padStart(2, '0')}</span>
-              <WalletLink address={r.wallet} />
-              <span className="mono earn-amt">{fmtNum(Number(BigInt(r.paid_raw)) / 10 ** d, 4)}</span>
-              <span className="muted small">{r.payouts} payouts</span>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <div className="empty card">
-          <Px name="users" size={28} /> Fills in after the first payout.
-        </div>
-      )}
+      <SectionHead n={5} title="Leaderboards" right={<span className="pixel muted">real payouts, real holders</span>} />
+      <Win title={`${brand.key}-vault — boards`} tabs={['earners', 'diamond hands', 'recruiters']} tab={tab} onTab={setTab}>
+        {rows.length ? (
+          <ol className="earners">
+            {rows.map((r, i) => (
+              <li key={r.key}>
+                <span className={`rank pixel r${i + 1}`}>#{String(i + 1).padStart(2, '0')}</span>
+                {r.who}
+                <span className="mono earn-amt">{r.value}</span>
+                <span className="muted small">{r.note}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <div className="log-empty">
+            <span className="pixel">$ sort --by {tab.replace(' ', '-')}</span>
+            <span>{empty}</span>
+            <span className="cursor">▮</span>
+          </div>
+        )}
+      </Win>
     </section>
   );
 }
@@ -502,13 +562,14 @@ function VaultApp({ stats, events, cfg }) {
           </section>
         </>
       )}
-      {tab === 'my vault' && <MyVault cfg={cfg} />}
+      {tab === 'my vault' && <MyVault cfg={cfg} stats={stats} />}
       {tab === 'buy' && <Buy cfg={cfg} />}
     </main>
   );
 }
 
-function MyVault({ cfg }) {
+function MyVault({ cfg, stats }) {
+  const { me, setOpen } = useAuth();
   const [addr, setAddr] = useState(() => {
     try {
       return localStorage.getItem('vault:addr') || '';
@@ -533,33 +594,28 @@ function MyVault({ cfg }) {
     }
   }, []);
   useEffect(() => {
-    if (addr) look(addr);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (me?.wallet) {
+      setAddr(me.wallet);
+      look(me.wallet);
+    } else if (addr) look(addr);
+  }, [me?.wallet]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const connect = async () => {
-    const p = window.phantom?.solana || window.solana || window.solflare;
-    if (!p) return setErr('No Solana wallet found. Paste your address instead.');
-    try {
-      const r = await p.connect();
-      const a = (r?.publicKey || p.publicKey).toString();
-      setAddr(a);
-      look(a);
-    } catch {
-      setErr('Wallet connection was cancelled.');
-    }
-  };
   const rs = rewardSym(cfg);
+  const mine = me && data && data.wallet === me.wallet;
+  const link = me?.username ? inviteLink(me.username) : window.location.origin;
   return (
     <section className="section">
-      <SectionHead n={3} title={"My vault"} right={<span className="muted small">read-only, we never ask you to sign anything</span>} />
+      <SectionHead n={3} title={'My vault'} right={<span className="muted small">signing in is free and never sends a transaction</span>} />
       <div className="lookup">
-        <input value={addr} onChange={(e) => setAddr(e.target.value.trim())} placeholder="Paste your Solana wallet address" spellCheck="false" />
+        <input value={addr} onChange={(e) => setAddr(e.target.value.trim())} placeholder="Paste any Solana wallet address" spellCheck="false" />
         <button className="btn" onClick={() => look(addr)}>
           Check
         </button>
-        <button className="btn btn-ghost" onClick={connect}>
-          Use my wallet
-        </button>
+        {!me && (
+          <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+            Connect wallet
+          </button>
+        )}
       </div>
       {err && <div className="err">{err}</div>}
       {data && !data.error && (
@@ -578,6 +634,30 @@ function MyVault({ cfg }) {
               {fmtNum(data.owed, 4)}
             </StatTile>
           </div>
+          {mine && (
+            <div className="share-row">
+              <button
+                className="btn"
+                onClick={() =>
+                  shareOnX(
+                    Number(data.paid) > 0
+                      ? `I've been paid ${fmtNum(data.paid, 2)} ${rs} by the ${brand.name} vault just for holding $${brand.ticker}. No staking, no KYC. Every payout is on Solana:`
+                      : `I'm holding $${brand.ticker}. The ${brand.name} vault pays holders every ${cfg?.cycleMinutes || 5} minutes from real trading fees. No staking, no KYC:`,
+                    link,
+                  )
+                }
+              >
+                Share on X
+              </button>
+              {me.username ? (
+                <InviteCopy username={me.username} recruits={me.recruits} />
+              ) : (
+                <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+                  Pick a name to get an invite link
+                </button>
+              )}
+            </div>
+          )}
           {data.payouts.length ? (
             <ul className="log card">
               {data.payouts.map((p) => (
@@ -587,9 +667,16 @@ function MyVault({ cfg }) {
                   <span className="log-text">
                     {fmtNum(p.amount, 4)} {rs}
                   </span>
-                  <a className="log-link" href={solscanTx(p.sig)} target="_blank" rel="noreferrer">
-                    {ago(p.ts)} {'↗'}
-                  </a>
+                  <span className="log-link">
+                    {mine && (
+                      <button className="linkbtn" onClick={() => shareOnX(`Just got paid ${fmtNum(p.amount, 2)} ${rs} for holding $${brand.ticker}. Proof on Solana:`, solscanTx(p.sig))}>
+                        share
+                      </button>
+                    )}{' '}
+                    <a href={solscanTx(p.sig)} target="_blank" rel="noreferrer">
+                      {ago(p.ts)} ↗
+                    </a>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -600,7 +687,37 @@ function MyVault({ cfg }) {
           )}
         </>
       )}
+      <Estimator stats={stats?.data} start={data?.balance} />
     </section>
+  );
+}
+
+// What a balance would have earned over the last 24 hours, from real payouts.
+function Estimator({ stats: s, start }) {
+  const [amt, setAmt] = useState(() => String(Math.round(Number(start) || 1000000)));
+  useEffect(() => {
+    if (Number(start) > 0) setAmt(String(Math.round(Number(start))));
+  }, [start]);
+  const total = Number(s?.holdersTotal || 0);
+  const paid = Number(s?.rewardsPaid24h || 0);
+  const n = Math.max(0, Number(amt) || 0);
+  const est = total > 0 ? (paid * n) / Math.max(total, n) : 0;
+  const rs = rewardSym(s?.config);
+  return (
+    <div className="estimator card">
+      <div>
+        <span className="pixel muted">earnings estimator</span>
+        <h3>What would {fmtNum(n)} ${brand.ticker} have earned?</h3>
+        <p className="muted small">Uses the real payouts of the last 24 hours and the real total held. Volume changes every day, so this looks back. It is not a promise.</p>
+      </div>
+      <div className="est-io">
+        <input type="number" min="0" value={amt} onChange={(e) => setAmt(e.target.value)} aria-label={`Amount of $${brand.ticker}`} />
+        <div className="est-out">
+          <b className="mono">{total > 0 && paid > 0 ? fmtNum(est, 4) : '—'}</b>
+          <span className="muted small">{total > 0 && paid > 0 ? `${rs} in the last 24h` : 'fills in after the first payouts'}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 

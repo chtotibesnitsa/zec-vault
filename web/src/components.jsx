@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ago, fmtNum, rawToUi, short, solscanAcct, solscanTx } from './api.js';
 
+const nm = (e) => (e.name?.u ? '@' + e.name.u : e.name?.x ? '@' + e.name.x : short(e.wallet));
+
 const GLYPHS = 'abcdefghkmnoprsuvwxz0123456789';
 const reduced = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -168,15 +170,15 @@ export function eventText(e, cfg) {
   const sol = e.lamports ? (Number(e.lamports) / 1e9).toFixed(3) : null;
   switch (e.kind) {
     case 'buy':
-      return { tag: 'BUY', text: `${short(e.wallet)} bought ${fmtNum(rawToUi(e.amountRaw, d))} ${sym} for ${sol} SOL` };
+      return { tag: 'BUY', text: `${nm(e)} bought ${fmtNum(rawToUi(e.amountRaw, d))} ${sym} for ${sol} SOL` };
     case 'sell':
-      return { tag: 'SELL', text: `${short(e.wallet)} sold ${fmtNum(rawToUi(e.amountRaw, d))} ${sym} for ${sol} SOL` };
+      return { tag: 'SELL', text: `${nm(e)} sold ${fmtNum(rawToUi(e.amountRaw, d))} ${sym} for ${sol} SOL` };
     case 'claim':
       return { tag: 'FEES', text: `Vault claimed ${sol} SOL in creator fees` };
     case 'buyback':
       return { tag: 'BUYBACK', text: `Vault bought ${fmtNum(rawToUi(e.amountRaw, rd))} ${rsym} with ${sol} SOL` };
     case 'payout':
-      return { tag: 'PAID', text: `${short(e.wallet)} received ${fmtNum(rawToUi(e.amountRaw, rd), 4)} ${rsym}` };
+      return { tag: 'PAID', text: `${nm(e)} received ${fmtNum(rawToUi(e.amountRaw, rd), 4)} ${rsym}` };
     default:
       return { tag: e.kind.toUpperCase(), text: '' };
   }
@@ -374,10 +376,11 @@ export function AsciiField({ className = '', density = 14, chars = '01<>/\\|=+*#
   return <canvas ref={ref} className={`ascii-field ${className}`} aria-hidden="true" />;
 }
 
-export function WalletLink({ address }) {
+export function WalletLink({ address, name }) {
   return (
-    <a className="mono" href={solscanAcct(address)} target="_blank" rel="noreferrer">
-      {short(address)}
+    <a className={name?.u || name?.x ? 'who' : 'mono'} href={solscanAcct(address)} target="_blank" rel="noreferrer" title={address}>
+      {name?.u ? '@' + name.u : name?.x ? '@' + name.x : short(address)}
+      {name?.x && <span className="xbadge" title={'X: @' + name.x}>𝕏</span>}
     </a>
   );
 }

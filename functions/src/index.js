@@ -4,6 +4,7 @@
 // the holders' share, snapshots holders and pays them pro rata on-chain.
 // Nothing here is simulated: every feed row has a Solana signature.
 
+import { Identity, IDENTITY_SCHEMA } from './identity.js';
 import { Rpc, TOKEN_PROGRAM, sleep } from './rpc.js';
 import { allocate, buildSnapshot, chunk, fromRaw, parseTrade, selectPayouts, solDelta, toRaw, tokenDelta } from './engine.js';
 import {
@@ -47,7 +48,7 @@ function cfg(env) {
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET,POST,OPTIONS',
-  'access-control-allow-headers': 'content-type,x-admin-key',
+  'access-control-allow-headers': 'content-type,x-admin-key,authorization',
 };
 
 function json(data, status = 200, extra = {}) {
@@ -92,6 +93,8 @@ export class Vault {
       CREATE TABLE IF NOT EXISTS holders (wallet TEXT PRIMARY KEY, amount TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
     `);
+    this.sql.exec(IDENTITY_SCHEMA);
+    this.id = new Identity(this);
   }
 
   // ---------- small storage helpers ----------
@@ -135,6 +138,10 @@ export class Vault {
       if (p === '/api/leaderboard') return json(this.leaderboard());
       if (p.startsWith('/api/holder/')) return json(this.holder(decodeURIComponent(p.slice('/api/holder/'.length))));
       if (p.startsWith('/api/admin/')) return this.admin(req, p);
+      if (p === '/api/diamonds') return json(this.diamonds());
+      if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/profile' || p === '/api/referrals' || p.startsWith('/api/u/')) {
+        return this.id.route(req, p, url, json);
+      }
       return json({ error: 'not found' }, 404);
     } catch (e) {
       return json({ error: String(e.message || e) }, 500);
@@ -437,6 +444,7 @@ export class Vault {
       .exec(`SELECT * FROM events WHERE id > ? AND kind IN (${placeholders}) ORDER BY id DESC LIMIT ?`, after, ...kinds, limit)
       .toArray();
     return {
+      profiles: this.id.names(rows.map((r) => r.wallet)),
       events: rows.map((r) => ({
         id: r.id,
         ts: r.ts,
@@ -454,7 +462,20 @@ export class Vault {
     const rows = this.sql
       .exec('SELECT wallet, paid_raw, payouts, last_paid FROM owed WHERE CAST(paid_raw AS INTEGER) > 0 ORDER BY CAST(paid_raw AS INTEGER) DESC LIMIT 50')
       .toArray();
-    return { top: rows };
+    const wallets = rows.map((r) => r.wallet);
+    return { top: rows, profiles: this.id.names(wallets), streaks: this.id.streaks(wallets.slice(0, 20)) };
+  }
+
+  // Longest run of payouts without a sell, among wallets that have been paid.
+  diamonds() {
+    const rows = this.sql.exec('SELECT wallet FROM owed WHERE payouts > 0 ORDER BY payouts DESC LIMIT 200').toArray();
+    const st = this.id.streaks(rows.map((r) => r.wallet));
+    const top = Object.entries(st)
+      .map(([wallet, v]) => ({ wallet, ...v }))
+      .filter((r) => r.streak > 0)
+      .sort((a, b) => b.streak - a.streak)
+      .slice(0, 20);
+    return { top, profiles: this.id.names(top.map((r) => r.wallet)) };
   }
 
   holder(wallet) {

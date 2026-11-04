@@ -2,7 +2,7 @@
   "name": "privacy-vault-api",
   "version": "1.0.0",
   "scripts": {
-    "test": "vitest run test/engine.test.js && node --test test/cycle.node.mjs",
+    "test": "vitest run test/engine.test.js && node --test test/cycle.node.mjs test/identity.node.mjs",
     "build": "wrangler deploy --dry-run --outdir dist"
   },
   "license": "UNLICENSED",

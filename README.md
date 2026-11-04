@@ -64,6 +64,33 @@ Optional: `CYCLE_MINUTES` (5), `CLAIM_EVERY_MINUTES` (30), `GAS_RESERVE_SOL` (0.
 3. Open `yoursite/admin`, enter `ADMIN_KEY`, press Load status. "Live" should say yes. Press Run cycle now once.
 4. Within a minute the marquee and feed show real trades. The first payout happens once fees have been claimed and at least `MIN_CYCLE_SOL` is booked for holders.
 
+### 6. Sign-in, names and X (optional, switch on any time)
+Wallet sign-in works as soon as the worker is live. People connect Phantom, Solflare, Backpack or MetaMask's Solana account and sign one free message. That message sends no transaction and can't move funds. They pick a public name, which replaces their address on trades, payouts and leaderboards, and they get an invite link.
+
+To let people link their X account as well:
+1. Go to developer.x.com, then Projects & Apps, then create an app. Turn on **OAuth 2.0** with type **Web App**.
+2. Set the callback URL to `<workers.dev URL>/api/auth/x/callback` and the website to your site URL.
+3. Copy the OAuth 2.0 **Client ID** and **Client Secret**, and add them in Cloudflare:
+
+| Name | Type | Value |
+|---|---|---|
+| `X_CLIENT_ID` | Secret | OAuth 2.0 client ID |
+| `X_CLIENT_SECRET` | Secret | OAuth 2.0 client secret |
+| `SITE_URL` | Text | your site, e.g. `https://orchard-vault.vercel.app` (where people return after X) |
+| `BRAND_NAME` | Text | `Wraith` or `Orchard`, shown in the sign-in message |
+
+4. Redeploy. The **Link X** button appears in the account panel. We only read the public username and avatar (`users.read`). We never post for anyone.
+
+## Launch trailer
+`/trailer.html` on the site plays the launch teaser live, built from the site's own components. Add `?cut=explainer` for the longer explainer. To render a 60fps MP4 with sound, run this from the repo root, with Node, Playwright, ffmpeg and Python with numpy installed:
+
+```
+cd web && npm run build && cd ..
+node trailer/render.cjs web/dist teaser orchard-teaser.mp4 zec
+```
+
+The soundtrack is synthesized by `trailer/sfx.py`, so no samples or licenses are involved. Activity in the trailer is a redacted UI preview, never real or invented wallets.
+
 ### Reward token choices
 - **Own coin (default).** Fees buy the coin back and hand it to holders, like a buyback but paid out instead of burned. Always works.
 - **Wrapped ZEC.** Zenrock's zenZEC is wrapped ZEC on Solana, backed 1:1 by its issuer. Get the mint address from Zenrock's own site or app, check it on Solscan, then set `REWARD_MINT` and `REWARD_SYMBOL`.

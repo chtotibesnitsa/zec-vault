@@ -8,6 +8,23 @@ export async function api(path) {
   return res.json();
 }
 
+// JSON call with optional session token. Throws with the server's message.
+export async function apiSend(path, { method = 'POST', body, token } = {}) {
+  if (!brand.apiUrl) throw new Error('The vault opens at launch.');
+  const headers = { 'content-type': 'application/json' };
+  if (token) headers.authorization = 'Bearer ' + token;
+  const res = await fetch(brand.apiUrl + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j.error || 'HTTP ' + res.status);
+  return j;
+}
+
+// Display name for a wallet: @username, else the short address.
+export const who = (wallet, names) => {
+  const n = names?.[wallet];
+  return n?.u ? '@' + n.u : n?.x ? '@' + n.x : short(wallet);
+};
+
 // Polls an endpoint. Returns { data, error }. Pauses while the tab is hidden.
 export function usePoll(path, ms = 15000) {
   const [state, setState] = useState({ data: null, error: null });
@@ -52,7 +69,8 @@ export function useFeed(onNew, ms = 8000) {
     const run = async () => {
       try {
         if (!document.hidden) {
-          const { events: fresh } = await api(`/api/feed?limit=40&after=${lastId.current}`);
+          const { events: raw, profiles = {} } = await api(`/api/feed?limit=40&after=${lastId.current}`);
+          const fresh = raw.map((e) => ({ ...e, name: profiles[e.wallet] || null }));
           if (alive && fresh.length) {
             lastId.current = Math.max(lastId.current, ...fresh.map((e) => e.id));
             setEvents((prev) => [...fresh, ...prev].slice(0, 80));

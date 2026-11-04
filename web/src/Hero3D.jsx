@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 // you see the real object, outside it you see the encrypted ASCII view.
 // three.js is loaded lazily so the first paint stays fast.
 
-export default function Hero3D({ kind, accent, accent2 }) {
+export default function Hero3D({ kind, accent, accent2, manual = false, hint = true }) {
   const wrap = useRef(null);
   const [failed, setFailed] = useState(false);
 
@@ -18,7 +18,7 @@ export default function Hero3D({ kind, accent, accent2 }) {
         const { AsciiEffect } = await import('three/examples/jsm/effects/AsciiEffect.js');
         const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
         if (cancelled || !wrap.current) return;
-        stop = mount(wrap.current, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2 });
+        stop = mount(wrap.current, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2, manual });
       } catch (e) {
         console.warn('3D hero unavailable', e);
         setFailed(true);
@@ -28,20 +28,22 @@ export default function Hero3D({ kind, accent, accent2 }) {
       cancelled = true;
       stop();
     };
-  }, [kind, accent, accent2]);
+  }, [kind, accent, accent2, manual]);
 
   if (failed) return null;
   return (
     <div className="hero3d" ref={wrap} aria-hidden="true">
       <div className="lens-ring" />
-      <div className="hero3d-hint">
-        <span className="blink">▮</span> move to decrypt
-      </div>
+      {hint && (
+        <div className="hero3d-hint">
+          <span className="blink">▮</span> move to decrypt
+        </div>
+      )}
     </div>
   );
 }
 
-function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2 }) {
+function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2, manual }) {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
@@ -132,7 +134,21 @@ function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2 
     if (w < 520 && frame % 2) renderer.render(scene, camera);
     else ascii.render(scene, camera);
   };
-  if (reduced) {
+  if (manual) {
+    // Trailer capture: the caller sets the time for every frame.
+    el.__seek = (t) => {
+      const lx = 0.5 + Math.sin(t * 0.55) * 0.26;
+      const ly = 0.47 + Math.sin(t * 0.83) * 0.2;
+      el.style.setProperty('--mx', (lx * 100).toFixed(2) + '%');
+      el.style.setProperty('--my', (ly * 100).toFixed(2) + '%');
+      root.rotation.y = (lx - 0.5) * 0.6;
+      root.rotation.x = (ly - 0.5) * 0.4;
+      tick(t);
+      ascii.render(scene, camera);
+    };
+    el.__seek(0);
+    el.dataset.ready = '1';
+  } else if (reduced) {
     tick(1.2);
     ascii.render(scene, camera);
   } else loop();
