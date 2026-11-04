@@ -44,6 +44,8 @@ export function AuthProvider({ children, notify }) {
   const [token, setToken] = useState(() => store.get('vault:session'));
   const [me, setMe] = useState(null);
   const [open, setOpen] = useState(false);
+  // The live wallet connection (for swaps). Survives only this page load.
+  const [conn, setConn] = useState(null);
 
   const refresh = useCallback(async (t = token) => {
     if (!t) return setMe(null);
@@ -74,6 +76,13 @@ export function AuthProvider({ children, notify }) {
 
   const signIn = useCallback(async (wallet) => {
     const w = await connect(wallet);
+    setConn(w);
+    store.set('vault:addr', w.address);
+    if (!brand.apiUrl) {
+      // Pre-launch: no backend yet, so the wallet is connected without a session.
+      setOpen(false);
+      return null;
+    }
     const { nonce, message } = await apiSend('/api/auth/nonce', { body: { wallet: w.address } });
     const signature = await w.signMessage(message);
     const r = await apiSend('/api/auth/verify', { body: { wallet: w.address, nonce, signature } });
@@ -115,10 +124,16 @@ export function AuthProvider({ children, notify }) {
     store.set('vault:session', null);
     setToken(null);
     setMe(null);
-  }, [token]);
+    try {
+      await conn?.disconnect?.();
+    } catch {
+      /* wallet already gone */
+    }
+    setConn(null);
+  }, [token, conn]);
 
   return (
-    <Ctx.Provider value={{ token, me, signIn, saveName, linkX, unlinkX, logout, open, setOpen }}>
+    <Ctx.Provider value={{ token, me, conn, address: conn?.address || me?.wallet || null, signIn, saveName, linkX, unlinkX, logout, open, setOpen }}>
       {children}
       {open && <ConnectModal onClose={() => setOpen(false)} />}
     </Ctx.Provider>
@@ -126,7 +141,15 @@ export function AuthProvider({ children, notify }) {
 }
 
 export function AccountButton() {
-  const { me, setOpen } = useAuth();
+  const { me, conn, setOpen } = useAuth();
+  if (!me && conn) {
+    return (
+      <button className="acct" onClick={() => setOpen(true)} title={conn.address}>
+        <Px name="wallet" size={16} />
+        <span>{short(conn.address)}</span>
+      </button>
+    );
+  }
   if (me) {
     return (
       <button className="acct" onClick={() => setOpen(true)} title={me.wallet}>
@@ -143,7 +166,7 @@ export function AccountButton() {
 }
 
 function ConnectModal({ onClose }) {
-  const { me, signIn, saveName, linkX, unlinkX, logout } = useAuth();
+  const { me, conn, signIn, saveName, linkX, unlinkX, logout } = useAuth();
   const [wallets, setWallets] = useState(listWallets);
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
@@ -188,7 +211,16 @@ function ConnectModal({ onClose }) {
           </button>
         </div>
         <div className="modal-body">
-          {!me ? (
+          {!me && conn ? (
+            <>
+              <h3>Wallet connected</h3>
+              <div className="mono small muted">{conn.address}</div>
+              <p className="muted small">Names, X linking and invite links open when the vault goes live. Your wallet is already set for swaps and the holder check.</p>
+              <button className="linkbtn" onClick={() => run('out', logout)}>
+                Disconnect
+              </button>
+            </>
+          ) : !me ? (
             <>
               <h3>Connect a Solana wallet</h3>
               <p className="muted small">You sign one message to prove the wallet is yours. It's free, sends no transaction and can't move funds. No email, no KYC.</p>

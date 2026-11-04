@@ -1,7 +1,7 @@
 // Finds Solana wallets through the Wallet Standard (Phantom, Solflare,
 // Backpack, MetaMask's Solana account and others) with a fallback to the
-// older injected providers. We only ever ask for a message signature, never
-// a transaction.
+// older injected providers. Sign-in asks only for a message signature. The
+// swap page asks the wallet to sign and send a swap the user reviews first.
 
 const found = new Map();
 const listeners = new Set();
@@ -64,6 +64,22 @@ export function deepLinks() {
 
 const toB64 = (bytes) => btoa(String.fromCharCode(...bytes));
 
+const ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function b58(bytes) {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  let out = '';
+  while (n > 0n) {
+    out = ALPHA[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b !== 0) break;
+    out = '1' + out;
+  }
+  return out;
+}
+
 // Connects and returns { address, signMessage(text) -> base64 signature }.
 export async function connect(w) {
   if (w.kind === 'standard') {
@@ -77,6 +93,15 @@ export async function connect(w) {
         const first = Array.isArray(out) ? out[0] : out;
         return toB64(first.signature);
       },
+      canSwap: Boolean(w.raw.features['solana:signAndSendTransaction']),
+      // Takes the raw bytes of an unsigned VersionedTransaction, returns the base58 signature.
+      async signAndSend(bytes) {
+        const f = w.raw.features['solana:signAndSendTransaction'];
+        if (!f) throw new Error('This wallet cannot send transactions from here');
+        const out = await f.signAndSendTransaction({ account, transaction: bytes, chain: 'solana:mainnet' });
+        const first = Array.isArray(out) ? out[0] : out;
+        return b58(first.signature);
+      },
       disconnect: () => w.raw.features['standard:disconnect']?.disconnect?.(),
     };
   }
@@ -88,6 +113,10 @@ export async function connect(w) {
     async signMessage(text) {
       const out = await p.signMessage(new TextEncoder().encode(text), 'utf8');
       return toB64(out.signature || out);
+    },
+    canSwap: false,
+    async signAndSend() {
+      throw new Error('Open this page in Phantom, Solflare or Backpack to swap');
     },
     disconnect: () => p.disconnect?.(),
   };

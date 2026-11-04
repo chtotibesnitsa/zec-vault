@@ -7,5 +7,6 @@ import '@fontsource/ibm-plex-mono/600.css';
 import '@fontsource/vt323/400.css';
 import App from './App.jsx';
 import './styles.css';
+import './v5.css';
 
 createRoot(document.getElementById('root')).render(<App />);

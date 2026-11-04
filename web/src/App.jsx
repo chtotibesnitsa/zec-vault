@@ -3,6 +3,9 @@ import { brand, fill } from './brand.js';
 import { api, fmtNum, fmtUsd, short, solscanAcct, solscanTx, ago, useFeed, usePoll } from './api.js';
 import { AsciiField, CopyChip, Countdown, Counter, Emblem, FeedTable, Marquee, Reveal, Scramble, Toasts, WalletLink, Win, Wordmark } from './components.jsx';
 import { Px } from './pixel.jsx';
+import { FloatingProof, PayoutPulse, UsageStrip } from './proof.jsx';
+import { SAMPLE_STATS, useSampleFeed } from './sample.js';
+import { BurnTracker, FlowStory, Hero5, LiveBoard, ProofBar, SwapSection } from './landing.jsx';
 import { AccountButton, AuthProvider, InviteCopy, inviteLink, shareOnX, useAuth } from './auth.jsx';
 
 const Hero3D = lazy(() => import('./Hero3D.jsx'));
@@ -54,20 +57,29 @@ export default function App() {
     setToasts((t) => [e, ...t].slice(0, 3));
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== e.id)), 6500);
   }, []);
-  const events = useFeed(pushToast);
+  const realEvents = useFeed(pushToast);
   const cfg = stats.data?.config || null;
+  // Before launch the page runs on clearly labelled sample activity.
+  const preview = !realEvents.length && !cfg?.live;
+  const sampleTick = useRef(0);
+  const sampleEvents = useSampleFeed(preview, (e) => {
+    if (sampleTick.current++ % 3 === 0) pushToast(e);
+  });
+  const events = realEvents.length ? realEvents : sampleEvents;
   const isApp = path.startsWith('/app');
   const isAdmin = path.startsWith('/admin');
+  const isSwap = path.startsWith('/swap');
 
   useEffect(() => {
     const r = document.documentElement;
     r.dataset.theme = brand.theme;
+    r.style.setProperty('--glow', brand.glow);
     r.dataset.vault = brand.key;
     r.style.setProperty('--accent', brand.accent);
     r.style.setProperty('--accent2', brand.accent2);
     r.style.setProperty('--accent-deep', brand.accentDeep);
     r.style.setProperty('--accent-text', brand.accentText);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', brand.theme === 'light' ? '#f1ece0' : '#0c0b0a');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', brand.theme === 'light' ? '#f1ece0' : brand.key === 'zec' ? '#0a0907' : '#09090b');
     document.title = isApp ? `${brand.name} · vault` : `${brand.name} · ${brand.headline}`;
   }, [isApp]);
 
@@ -84,8 +96,13 @@ export default function App() {
       <StatusBar stats={stats.data} />
       <Nav go={go} isApp={isApp} cfg={cfg} />
       <Marquee events={events} cfg={cfg} />
-      <div className="page" key={isAdmin ? 'admin' : isApp ? 'app' : 'home'}>
-        {isAdmin ? <Admin /> : isApp ? <VaultApp stats={stats} events={events} cfg={cfg} /> : <Landing go={go} stats={stats} events={events} cfg={cfg} />}
+      <div className="page" key={isAdmin ? 'admin' : isApp ? 'app' : isSwap ? 'swap' : 'home'}>
+        {isAdmin ? <Admin /> : isSwap ? (
+          <main>
+            <SwapSection cfg={cfg} />
+            <LiveBoard events={events} cfg={cfg} preview={preview} />
+          </main>
+        ) : isApp ? <VaultApp stats={stats} events={events} cfg={cfg} /> : <Landing go={go} stats={stats} events={events} cfg={cfg} preview={preview} />}
       </div>
       <Footer />
       <Toasts items={toasts} cfg={cfg} />
@@ -141,10 +158,11 @@ function Nav({ go, isApp, cfg }) {
       <nav className="nav-links">
         {!isApp && (
           <>
-            <a href="#how">how</a>
             <a href="#live">live</a>
-            <a href="#token">token</a>
-            <a href="#faq">faq</a>
+            <a href="#swap">swap</a>
+            <a href="#flow">how</a>
+            <a href="#burn">burn</a>
+            <a href="#faq" className="hide-sm">faq</a>
           </>
         )}
         {cfg?.tokenMint && (
@@ -273,134 +291,63 @@ function FeeBlocks({ pct }) {
   );
 }
 
-function Landing({ go, stats, events, cfg }) {
+function Landing({ go, stats, events, cfg, preview }) {
   const s = stats.data;
+  const proof = preview ? { ...SAMPLE_STATS, ...(s || {}), community: SAMPLE_STATS.community, holders: SAMPLE_STATS.holders, burned: SAMPLE_STATS.burned, burnSol: SAMPLE_STATS.burnSol, rewardsPaid: SAMPLE_STATS.rewardsPaid, trades24h: SAMPLE_STATS.trades24h } : s;
   const shareBps = cfg?.rewardShareBps ?? 8000;
-  const [feedTab, setFeedTab] = useState('all');
-  const filtered = useMemo(() => {
-    if (feedTab === 'trades') return events.filter((e) => e.kind === 'buy' || e.kind === 'sell');
-    if (feedTab === 'payouts') return events.filter((e) => e.kind === 'payout');
-    if (feedTab === 'vault') return events.filter((e) => e.kind === 'claim' || e.kind === 'buyback');
-    return events;
-  }, [events, feedTab]);
+  const burnBps = cfg?.burnBps ?? 1000;
   const faq = useMemo(
     () => [
       ['Do I need to stake or claim?', 'No. Hold ${ticker} in any Solana wallet. The vault finds you in its snapshot and sends your share. Nothing to sign, nothing to lock.'],
       ['Where does the money come from?', 'Only from real trading. Pump.fun pays the coin creator a fee on every trade. The vault wallet is the creator, so those fees land there and get spent on rewards. Nothing is minted.'],
       ['How is my share worked out?', 'Your balance divided by the total held by all eligible wallets at each snapshot. Pools, bonding curves and the vault itself are excluded, so only people get paid.'],
-      ['Can the team take the fees?', `${(shareBps / 100).toFixed(0)}% of every fee claimed is booked for holders and can only be spent buying rewards. The other ${(100 - shareBps / 100).toFixed(0)}% runs the project. Every claim, buy and payout is a public Solana transaction linked in the feed.`],
+      ['Can the team take the fees?', `${(shareBps / 100).toFixed(0)}% of every fee claimed is booked for holders and can only be spent buying rewards. ${(burnBps / 100).toFixed(0)}% buys $${brand.ticker} and burns it. The other ${(100 - shareBps / 100 - burnBps / 100).toFixed(0)}% runs the project. Every claim, buy, burn and payout is a public Solana transaction linked in the feed.`],
+      ['Why swap on this site?', 'We add 0% on top. The swap is routed by Jupiter and signed in your own wallet, so you get the best price and the funds never pass through us.'],
       ['Why no KYC?', 'Because there is nothing to sign up for. We never hold your coins and never ask who you are. You hold a token in your own wallet; the vault sends rewards to that address.'],
       ...brand.faqExtra,
       ['Is this safe?', 'Memecoins are volatile and can go to zero. Rewards depend on trading volume and are never guaranteed. Not financial advice.'],
     ],
-    [shareBps],
+    [shareBps, burnBps],
   );
-  const stepIcons = ['swap', 'flame', 'coins'];
 
   return (
     <main>
-      <section className="hero">
-        <div className="hero-mark">
-          <div className="kicker pixel">
-            <span className="rec" /> {brand.kicker}
-          </div>
-          <h1 className="hero-wm" aria-label={brand.name}>
-            <Wordmark text={brand.name} />
-          </h1>
-        </div>
-        <div className="hero-grid">
-          <div className="hero-copy">
-            <Scramble as="p" text={brand.headline} className="headline" />
-            <p className="lede">{fill(brand.sub, cfg)}</p>
-            <div className="hero-cta">
-              <a href="/app" className="btn" onClick={(e) => (e.preventDefault(), go('/app'))}>
-                Check my rewards
-              </a>
-              {cfg?.tokenMint ? (
-                <a className="btn btn-ghost" href={`https://pump.fun/coin/${cfg.tokenMint}`} target="_blank" rel="noreferrer">
-                  Buy ${brand.ticker}
-                </a>
-              ) : (
-                <a className="btn btn-ghost" href={`https://x.com/${brand.xHandle}`} target="_blank" rel="noreferrer">
-                  Follow for launch
-                </a>
-              )}
-            </div>
-            <CopyChip value={cfg?.tokenMint} />
-            <ul className="hero-facts pixel">
-              <li>
-                <Px name="lock" size={16} /> no custody
-              </li>
-              <li>
-                <Px name="eye" size={16} /> no kyc
-              </li>
-              <li>
-                <Px name="clock" size={16} /> paid every {cfg?.cycleMinutes || 5} min
-              </li>
-            </ul>
-          </div>
-          <HeroViewport />
-        </div>
-      </section>
+      <Hero5
+        cfg={cfg}
+        s={proof}
+        preview={preview}
+        visual={<HeroViewport />}
+        overlay={
+          <>
+            <FloatingProof events={events} cfg={cfg} />
+            <PayoutPulse s={s} sample={preview} />
+          </>
+        }
+      />
+      <ProofBar s={proof} preview={preview} />
 
       <Reveal>
-        <section className="section" id="stats">
-          <SectionHead n={1} title="Vault, live" right={<span className="pixel muted">{s ? <><span className="rec" /> refresh 15s</> : brand.apiUrl ? 'connecting…' : 'opens at launch'}</span>} />
-          <Win title={`${brand.key}-vault — stats`} right={<span className="pixel">{s?.config?.live ? 'online' : 'standby'}</span>}>
-            <StatsGrid s={s} />
-          </Win>
-        </section>
+        <LiveBoard events={events} cfg={cfg} preview={preview} />
       </Reveal>
 
       <Reveal>
-        <section className="section" id="how">
-          <SectionHead n={2} title="How it works" />
-          <ol className="steps">
-            {brand.steps.map(([t, d], i) => (
-              <li key={i} className="step">
-                <div className="step-art">
-                  <Px name={stepIcons[i]} size={64} />
-                  <span className="pixel step-n">step 0{i + 1}</span>
-                </div>
-                <h3>{fill(t, cfg)}</h3>
-                <p>{fill(d, cfg)}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
+        <SwapSection cfg={cfg} />
+      </Reveal>
+
+      <FlowStory cfg={cfg} s={proof} />
+
+      <Reveal>
+        <BurnTracker s={proof} events={events} cfg={cfg} preview={preview} />
       </Reveal>
 
       <Reveal>
-        <section className="section" id="fees">
-          <SectionHead n={3} title="Where every fee goes" />
-          <div className="fees card">
-            <FeeBlocks pct={shareBps / 100} />
-            <div className="fees-legend">
-              <div>
-                <b className="mono">{(shareBps / 100).toFixed(0)}%</b>
-                <span>to holders as {rewardSym(cfg)}. Can only be spent on rewards.</span>
-              </div>
-              <div className="muted">
-                <b className="mono">{(100 - shareBps / 100).toFixed(0)}%</b>
-                <span>runs the project. Shown on-chain like everything else.</span>
-              </div>
-            </div>
-          </div>
-        </section>
+        <Starter go={go} cfg={cfg} />
       </Reveal>
 
       <Reveal>
-        <section className="section" id="estimate">
-          <Estimator stats={s} />
-        </section>
-      </Reveal>
-
-      <Reveal>
-        <section className="section" id="live">
-          <SectionHead n={4} title="Every move, verifiable" right={<span className="muted small">each line links to its Solana transaction</span>} />
-          <Win title={`${brand.key}-vault — tail -f`} tabs={['all', 'trades', 'payouts', 'vault']} tab={feedTab} onTab={setFeedTab}>
-            <FeedTable events={filtered} cfg={cfg} empty="No activity yet. The first trade after launch shows up here within a minute." />
-          </Win>
+        <section className="section" id="community">
+          <SectionHead n={2} title="Every feature, in use" right={<span className="pixel muted">{preview ? 'sample counts' : 'live counts'}</span>} />
+          <UsageStrip s={proof} sample={preview} />
         </section>
       </Reveal>
 
@@ -410,7 +357,7 @@ function Landing({ go, stats, events, cfg }) {
 
       <Reveal>
         <section className="section" id="token">
-          <SectionHead n={6} title="The token" />
+          <SectionHead n={4} title="The token" />
           <dl className="spec card">
             <Row k="ticker" v={`$${brand.ticker}`} />
             <Row k="launch" v="Fair launch on Pump.fun, no presale" />
@@ -425,7 +372,7 @@ function Landing({ go, stats, events, cfg }) {
 
       <Reveal>
         <section className="section" id="faq">
-          <SectionHead n={7} title="FAQ" />
+          <SectionHead n={5} title="FAQ" />
           <div className="faq">
             {faq.map(([q, a], i) => (
               <details key={i}>
@@ -456,6 +403,88 @@ function Landing({ go, stats, events, cfg }) {
         </div>
       </section>
     </main>
+  );
+}
+
+// Guided start: four steps that tick off for a signed-in holder.
+function Starter({ go, cfg }) {
+  const { me, setOpen } = useAuth();
+  const [h, setH] = useState(null);
+  useEffect(() => {
+    if (!me?.wallet) return setH(null);
+    api(`/api/holder/${me.wallet}`).then(setH).catch(() => setH(null));
+  }, [me?.wallet]);
+  const has = Number(h?.balance || 0) > 0;
+  const steps = [
+    {
+      ic: 'swap',
+      t: `Get $${brand.ticker}`,
+      d: cfg?.tokenMint ? 'Buy any amount on Pump.fun or Jupiter.' : 'Fair launch on Pump.fun. Follow so you catch the CA.',
+      done: has,
+      cta: cfg?.tokenMint ? (
+        <a className="btn btn-sm" href={`https://pump.fun/coin/${cfg.tokenMint}`} target="_blank" rel="noreferrer">
+          Buy
+        </a>
+      ) : (
+        <a className="btn btn-sm" href={`https://x.com/${brand.xHandle}`} target="_blank" rel="noreferrer">
+          Follow
+        </a>
+      ),
+    },
+    {
+      ic: 'clock',
+      t: 'Just hold',
+      d: `Keep ${fmtNum(cfg?.minHoldTokens || 100000)}+ in any wallet. Payouts land every ${cfg?.cycleMinutes || 5} min. Nothing to stake or claim.`,
+      done: Boolean(h?.eligible),
+      cta: null,
+    },
+    {
+      ic: 'eye',
+      t: 'Claim your name',
+      d: 'Connect, sign one free message, pick a name. It shows on every payout you get.',
+      done: Boolean(me?.username),
+      cta: !me?.username && (
+        <button className="btn btn-sm" onClick={() => setOpen(true)}>
+          Connect
+        </button>
+      ),
+    },
+    {
+      ic: 'flame',
+      t: 'Bring friends',
+      d: 'Share your invite link and climb the recruiters board.',
+      done: (me?.recruits || 0) > 0,
+      cta: me?.username ? (
+        <button className="btn btn-sm" onClick={() => shareOnX(`Hold $${brand.ticker}, get paid every ${cfg?.cycleMinutes || 5} minutes from real trading fees. No staking, no KYC.`, inviteLink(me.username))}>
+          Share
+        </button>
+      ) : null,
+    },
+  ];
+  const done = steps.filter((x) => x.done).length;
+  return (
+    <section className="section" id="start">
+      <SectionHead n={1} title="Start in 30 seconds" right={<span className="pixel muted">{me ? `${done}/4 done` : 'no sign-up, no kyc'}</span>} />
+      <div className="starter">
+        <div className="st-bar">
+          <i style={{ width: `${(done / 4) * 100}%` }} />
+        </div>
+        {steps.map((x, i) => (
+          <div key={x.t} className={`st-step ${x.done ? 'done' : ''}`} style={{ '--i': i }}>
+            <span className="st-n pixel">{x.done ? '✓' : '0' + (i + 1)}</span>
+            <Px name={x.ic} size={40} />
+            <h3>{x.t}</h3>
+            <p className="muted">{x.d}</p>
+            {!x.done && x.cta}
+          </div>
+        ))}
+      </div>
+      <div className="st-foot">
+        <a href="/app" className="linkbtn" onClick={(e) => (e.preventDefault(), go('/app'))}>
+          or paste any wallet to see what it earned →
+        </a>
+      </div>
+    </section>
   );
 }
 
@@ -502,6 +531,20 @@ function TopEarners() {
       value: `${r.recruits}`,
       note: 'holders invited',
     }));
+  const sampleMode = !cfgState.data?.live && !rows.length;
+  if (sampleMode) {
+    const names = ['night_owl', 'ghost_01', 'no_kyc', 'quiet_one', 'cipher', 'zero_trace', 'shade'];
+    rows = names.map((u, i) => ({
+      key: u,
+      who: (
+        <span className="who">
+          @{u} {i % 2 === 0 && <span className="xbadge">𝕏</span>}
+        </span>
+      ),
+      value: tab === 'earners' ? fmtNum(98000 / (i + 1.3), 2) : tab === 'diamond hands' ? `${60 - i * 7} payouts` : `${24 - i * 3}`,
+      note: <span className="sample-tag pixel">sample</span>,
+    }));
+  }
   const empty = {
     earners: 'Fills in after the first payout.',
     'diamond hands': 'Wallets that keep getting paid without selling show up here.',
@@ -509,7 +552,7 @@ function TopEarners() {
   }[tab];
   return (
     <section className="section" id="earners">
-      <SectionHead n={5} title="Leaderboards" right={<span className="pixel muted">real payouts, real holders</span>} />
+      <SectionHead n={3} title="Leaderboards" right={<span className="pixel muted">real payouts, real holders</span>} />
       <Win title={`${brand.key}-vault — boards`} tabs={['earners', 'diamond hands', 'recruiters']} tab={tab} onTab={setTab}>
         {rows.length ? (
           <ol className="earners">

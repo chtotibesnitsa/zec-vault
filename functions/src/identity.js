@@ -264,6 +264,22 @@ export class Identity {
     }
   }
 
+  // Usage of the social features, plus the newest named members.
+  community() {
+    const one = (q) => this.sql.exec(q).toArray()[0].n;
+    const joins = this.sql
+      .exec('SELECT username, x_handle, created FROM profiles WHERE username IS NOT NULL ORDER BY created DESC LIMIT 8')
+      .toArray()
+      .map((r) => ({ u: r.username, x: r.x_handle || null, ts: r.created }));
+    return {
+      members: one('SELECT COUNT(*) AS n FROM profiles'),
+      named: one('SELECT COUNT(*) AS n FROM profiles WHERE username IS NOT NULL'),
+      xLinked: one('SELECT COUNT(*) AS n FROM profiles WHERE x_handle IS NOT NULL'),
+      invited: one('SELECT COUNT(*) AS n FROM profiles WHERE ref_by IS NOT NULL'),
+      joins,
+    };
+  }
+
   // ---------- boards ----------
   topRecruiters() {
     const rows = this.sql

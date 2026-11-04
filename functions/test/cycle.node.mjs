@@ -273,3 +273,25 @@ for (const [label, programId] of [
     });
   });
 }
+
+import { burnTokens } from '../src/solana.js';
+for (const [label, programId] of [
+  ['SPL Token', TOKEN_PROGRAM_ID],
+  ['Token-2022', TOKEN_2022_PROGRAM_ID],
+]) {
+  describe(`buyback burn (${label})`, () => {
+    it('burns exactly the bought amount and lowers supply', async () => {
+      const { svm, newMint, mintTo, balanceOf } = setup(programId);
+      const treasury = Keypair.generate();
+      svm.airdrop(treasury.publicKey, BigInt(LAMPORTS_PER_SOL));
+      const mint = newMint(6);
+      mintTo(mint, treasury.publicKey, 5_000_000n);
+      const supply = () => MintLayout.decode(Buffer.from(svm.getAccount(mint).data).subarray(0, MINT_SIZE)).supply;
+      const before = supply();
+      const rpc = svmRpc(svm, programId, () => []);
+      await burnTokens(rpc, treasury, { mint: mint.toBase58(), program: programId.toBase58(), amount: 1_250_000n, decimals: 6, microLamports: 1000 });
+      expect(balanceOf(mint, treasury.publicKey)).toBe(3_750_000n);
+      expect(supply()).toBe(before - 1_250_000n);
+    });
+  });
+}

@@ -8,6 +8,7 @@ import { Identity, IDENTITY_SCHEMA } from './identity.js';
 import { Rpc, TOKEN_PROGRAM, sleep } from './rpc.js';
 import { allocate, buildSnapshot, chunk, fromRaw, parseTrade, selectPayouts, solDelta, toRaw, tokenDelta } from './engine.js';
 import {
+  burnTokens,
   buyOwnToken,
   collectCreatorFees,
   isOnCurveAddress,
@@ -28,6 +29,7 @@ function cfg(env) {
     tokenSymbol: env.TOKEN_SYMBOL || 'VAULT',
     rewardSymbol: env.REWARD_SYMBOL || '',
     shareBps: Math.min(10000, Math.max(0, num(env.REWARD_SHARE_BPS, 8000))),
+    burnBps: Math.max(0, num(env.BURN_BPS, 1000)),
     cycleMinutes: Math.max(1, num(env.CYCLE_MINUTES, 5)),
     claimEveryMinutes: Math.max(1, num(env.CLAIM_EVERY_MINUTES, 30)),
     gasReserveSol: num(env.GAS_RESERVE_SOL, 0.05),
@@ -139,6 +141,7 @@ export class Vault {
       if (p.startsWith('/api/holder/')) return json(this.holder(decodeURIComponent(p.slice('/api/holder/'.length))));
       if (p.startsWith('/api/admin/')) return this.admin(req, p);
       if (p === '/api/diamonds') return json(this.diamonds());
+      if (p === '/api/jup/quote' || p === '/api/jup/swap') return this.jupProxy(req, p, url);
       if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/profile' || p === '/api/referrals' || p.startsWith('/api/u/')) {
         return this.id.route(req, p, url, json);
       }
@@ -146,6 +149,18 @@ export class Vault {
     } catch (e) {
       return json({ error: String(e.message || e) }, 500);
     }
+  }
+
+  // Pass-through to Jupiter for browsers that can't call it directly. Only the
+  // quote and swap-build endpoints; the user's wallet still signs and sends.
+  async jupProxy(req, p, url) {
+    const c = cfg(this.env);
+    const headers = { 'content-type': 'application/json' };
+    if (c.jupKey) headers['x-api-key'] = c.jupKey;
+    const target = c.jupBase + (p.endsWith('quote') ? '/quote' + url.search : '/swap');
+    const init = p.endsWith('quote') ? { headers } : { method: 'POST', headers, body: await req.text() };
+    const r = await fetch(target, init);
+    return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', ...CORS } });
   }
 
   publicConfig() {
@@ -158,6 +173,7 @@ export class Vault {
       rewardSymbol: c.rewardSymbol || c.tokenSymbol,
       rewardIsOwnToken: !c.rewardMint,
       rewardShareBps: c.shareBps,
+      burnBps: Math.min(c.burnBps, 10000 - c.shareBps),
       cycleMinutes: c.cycleMinutes,
       minHoldTokens: c.minHold,
       treasury: signer ? signer.publicKey.toBase58() : null,
@@ -259,10 +275,13 @@ export class Vault {
         const gained = tx ? solDelta(tx, me, { addBackFee: true }) : 0n;
         if (gained > 0n) {
           const toHolders = (gained * BigInt(c.shareBps)) / 10000n;
+          const burnBps = Math.min(c.burnBps, 10000 - c.shareBps);
+          const toBurn = (gained * BigInt(burnBps)) / 10000n;
           this.addBig('fees_total_lamports', gained);
           this.addBig('holders_budget_lamports', toHolders);
-          this.addBig('ops_lamports', gained - toHolders);
-          this.event({ kind: 'claim', sig, wallet: me, lamports: gained, meta: { toHolders: toHolders.toString() } });
+          this.addBig('burn_budget_lamports', toBurn);
+          this.addBig('ops_lamports', gained - toHolders - toBurn);
+          this.event({ kind: 'claim', sig, wallet: me, lamports: gained, meta: { toHolders: toHolders.toString(), toBurn: toBurn.toString() } });
         }
       } catch (e) {
         // "nothing to claim" shows up as a failed simulation; that is normal.
@@ -292,6 +311,29 @@ export class Vault {
         this.addBig('rewards_bought_raw', got);
       }
       this.event({ kind: 'buyback', sig, wallet: me, amountRaw: got, lamports: spent });
+    }
+
+    // 2b. Buy back the vault token with the burn budget and burn exactly what was bought.
+    const burnBudget = this.big('burn_budget_lamports');
+    const afterBuy = BigInt(await rpc.getBalance(me));
+    const burnSpend = burnBudget < afterBuy - reserve ? burnBudget : afterBuy > reserve ? afterBuy - reserve : 0n;
+    if (burnSpend >= BigInt(Math.round(c.minCycleSol * LAMPORTS))) {
+      const buySig = await buyOwnToken(rpc, signer, { mint: c.mint, sol: Number(burnSpend) / LAMPORTS, slippage: c.slippage, priorityFee: c.priorityFee });
+      const tx = await this.txWithRetry(rpc, buySig);
+      const bought = tx ? tokenDelta(tx, me, c.mint) : 0n;
+      this.addBig('burn_budget_lamports', -burnSpend);
+      if (bought > 0n) {
+        const sig = await burnTokens(rpc, signer, {
+          mint: c.mint,
+          program: this.get('mint_program', TOKEN_PROGRAM),
+          amount: bought,
+          decimals: Number(this.get('mint_decimals', '6')),
+          microLamports: c.microLamports,
+        });
+        this.addBig('burned_raw', bought);
+        this.addBig('burn_sol_lamports', burnSpend);
+        this.event({ kind: 'burn', sig, wallet: me, amountRaw: bought, lamports: burnSpend, meta: { buySig } });
+      }
     }
 
     // 3. Snapshot holders and credit each one's share of the reward pool.
@@ -425,6 +467,9 @@ export class Vault {
       rewardsBought: fromRaw(this.big('rewards_bought_raw'), rd),
       rewardsPaid: fromRaw(this.big('rewards_paid_raw'), rd),
       rewardsPaid24h: fromRaw(paid24, rd),
+      burned: fromRaw(this.big('burned_raw'), decimals),
+      burnSol: Number(this.big('burn_sol_lamports')) / LAMPORTS,
+      burnPendingSol: Number(this.big('burn_budget_lamports')) / LAMPORTS,
       rewardPool: fromRaw(this.big('reward_pool_raw'), rd),
       paidWallets,
       trades24h: trades24,
@@ -432,13 +477,14 @@ export class Vault {
       nextCycleAt: lastCycle ? lastCycle + c.cycleMinutes * 60000 : null,
       snapshotAt: Number(this.get('snapshot_at', '0')) || null,
       lastError: this.get('last_error') || null,
+      community: this.id.community(),
     };
   }
 
   feed(url) {
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 40)));
     const after = Number(url.searchParams.get('after') || 0);
-    const kinds = (url.searchParams.get('kinds') || 'buy,sell,claim,buyback,payout').split(',').filter((k) => /^[a-z]+$/.test(k));
+    const kinds = (url.searchParams.get('kinds') || 'buy,sell,claim,buyback,burn,payout').split(',').filter((k) => /^[a-z]+$/.test(k));
     const placeholders = kinds.map(() => '?').join(',');
     const rows = this.sql
       .exec(`SELECT * FROM events WHERE id > ? AND kind IN (${placeholders}) ORDER BY id DESC LIMIT ?`, after, ...kinds, limit)

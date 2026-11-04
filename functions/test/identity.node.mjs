@@ -130,3 +130,14 @@ test('X link is off until the keys are set', async () => {
   const r = await call(v, 'POST', '/api/auth/x/start', {}, t);
   assert.equal(r.status, 503);
 });
+
+test('community counts feature usage', async () => {
+  const v = vault();
+  const a = wallet();
+  const t = await signIn(v, a);
+  await call(v, 'POST', '/api/profile', { username: 'first_one' }, t);
+  const c = v.id.community();
+  assert.equal(c.members, 1);
+  assert.equal(c.named, 1);
+  assert.equal(c.joins[0].u, 'first_one');
+});

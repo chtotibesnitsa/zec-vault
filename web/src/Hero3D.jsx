@@ -65,13 +65,13 @@ function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2,
   key.position.set(3, 4, 5);
   const rim = new THREE.PointLight(acc, 60, 20);
   rim.position.set(-3.5, -1, -2.5);
-  const fill = new THREE.PointLight(0x8b5cf6, 25, 20);
+  const fill = new THREE.PointLight(0xfff1e0, 18, 20);
   fill.position.set(4, -3, 2);
   scene.add(key, rim, fill, new THREE.AmbientLight(0xffffff, 0.15));
 
   const root = new THREE.Group();
   scene.add(root);
-  const tick = kind === 'shield' ? buildOrchard(THREE, root, acc) : buildWraith(THREE, root, acc);
+  const tick = kind === 'zec' || kind === 'shield' ? buildZec(THREE, root, acc) : buildXmr(THREE, root, acc);
 
   // ASCII layer (encrypted view)
   const ascii = new AsciiEffect(renderer, ' .:-+*=%@#', { invert: true, resolution: 0.17 });
@@ -165,114 +165,154 @@ function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2,
   };
 }
 
-// Monero mood: a living obsidian core inside a ring of decoys. One ring is the
-// real signer and the highlight keeps hopping between them.
-function buildWraith(THREE, root, acc) {
-  const geo = new THREE.IcosahedronGeometry(1.25, 48);
-  const base = geo.attributes.position.array.slice();
-  const core = new THREE.Mesh(
-    geo,
-    new THREE.MeshPhysicalMaterial({ color: 0x111014, metalness: 0.9, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08, iridescence: 0.6, iridescenceIOR: 1.6 }),
-  );
-  root.add(core);
-
-  const ringMat = () => new THREE.MeshPhysicalMaterial({ color: 0x2a2730, metalness: 1, roughness: 0.25, clearcoat: 1, emissive: acc.clone(), emissiveIntensity: 0 });
-  const ringGeo = new THREE.TorusGeometry(0.3, 0.075, 24, 64);
-  const orbit = new THREE.Group();
-  orbit.rotation.x = 1.15;
-  root.add(orbit);
-  const rings = [];
-  const N = 11;
-  for (let i = 0; i < N; i++) {
-    const m = new THREE.Mesh(ringGeo, ringMat());
-    const a = (i / N) * Math.PI * 2;
-    m.position.set(Math.cos(a) * 2.35, Math.sin(a) * 2.35, 0);
-    m.rotation.set(Math.random() * 3, Math.random() * 3, 0);
-    orbit.add(m);
-    rings.push(m);
+// A minted coin: metal body, reeded edge, raised lip on both faces. The
+// face artwork is added by the caller as extruded relief.
+function coinBody(THREE, { R, depth, edge, face }) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(R, R, depth, 128, 1, true), edge);
+  body.rotation.x = Math.PI / 2;
+  g.add(body);
+  const ridges = new THREE.InstancedMesh(new THREE.BoxGeometry(0.035, depth * 0.96, 0.05), edge, 150);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const xAxis = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  for (let i = 0; i < 150; i++) {
+    const a = (i / 150) * Math.PI * 2;
+    q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), a).multiply(xAxis);
+    m.compose(new THREE.Vector3(Math.cos(a) * R, Math.sin(a) * R, 0), q, new THREE.Vector3(1, 1, 1));
+    ridges.setMatrixAt(i, m);
   }
-  const halo = new THREE.Mesh(new THREE.TorusGeometry(2.35, 0.01, 8, 200), new THREE.MeshBasicMaterial({ color: acc, transparent: true, opacity: 0.35 }));
-  orbit.add(halo);
+  g.add(ridges);
+  for (const side of [1, -1]) {
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(R * 0.93, 128), face);
+    disk.position.z = (side * depth) / 2;
+    if (side < 0) disk.rotation.y = Math.PI;
+    g.add(disk);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(R * 0.965, R * 0.045, 16, 160), edge);
+    lip.position.z = (side * depth) / 2;
+    g.add(lip);
+  }
+  return g;
+}
 
-  const pos = geo.attributes.position;
-  const v = new THREE.Vector3();
+// Adds the same relief to both faces of a coin.
+function stamp(THREE, coin, geo, mat, depth, lift = 0) {
+  for (const side of [1, -1]) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.z = side * (depth / 2 + lift);
+    if (side < 0) m.rotation.y = Math.PI;
+    coin.add(m);
+  }
+}
+
+// Monero: orange coin, white M band, graphite lower segment. Eleven decoy
+// coins orbit it; one at a time lights up as the real signer.
+function buildXmr(THREE, root, acc) {
+  const R = 1.5;
+  const depth = 0.26;
+  const orange = new THREE.MeshPhysicalMaterial({ color: acc, metalness: 0.75, roughness: 0.28, clearcoat: 0.8 });
+  const graphite = new THREE.MeshPhysicalMaterial({ color: 0x4c4c4c, metalness: 0.9, roughness: 0.35 });
+  const silver = new THREE.MeshPhysicalMaterial({ color: 0xf2f2f2, metalness: 0.6, roughness: 0.18, clearcoat: 1 });
+  const coin = coinBody(THREE, { R, depth, edge: graphite, face: orange });
+  root.add(coin);
+  const k = R * 0.93;
+  const P = (pts) => pts.map(([x, y]) => new THREE.Vector2(x * k, y * k));
+  const mShape = new THREE.Shape(
+    P([[-0.968, -0.25], [-0.62, -0.25], [-0.62, 0.56], [0, -0.06], [0.62, 0.56], [0.62, -0.25], [0.968, -0.25], [0.906, -0.42], [0.45, -0.42], [0.45, 0.15], [0, -0.3], [-0.45, 0.15], [-0.45, -0.42], [-0.906, -0.42]]),
+  );
+  const ext = { depth: 0.07, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.015, bevelSegments: 3 };
+  stamp(THREE, coin, new THREE.ExtrudeGeometry(mShape, ext), silver, depth, -0.01);
+  const seg = new THREE.Shape();
+  const a0 = Math.asin(-0.42);
+  seg.moveTo(-0.906 * k, -0.42 * k);
+  seg.lineTo(0.906 * k, -0.42 * k);
+  seg.absarc(0, 0, k, a0, Math.PI - a0 + Math.PI * 0, true);
+  stamp(THREE, coin, new THREE.ExtrudeGeometry(seg, { depth: 0.03, bevelEnabled: false }), graphite, depth, -0.01);
+
+  const orbit = new THREE.Group();
+  orbit.rotation.x = 1.2;
+  root.add(orbit);
+  const mini = [];
+  const N = 11;
+  const miniGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.045, 40);
+  for (let i = 0; i < N; i++) {
+    const mat = new THREE.MeshPhysicalMaterial({ color: 0x2c2c2e, metalness: 1, roughness: 0.3, emissive: acc.clone(), emissiveIntensity: 0 });
+    const m = new THREE.Mesh(miniGeo, mat);
+    const a = (i / N) * Math.PI * 2;
+    m.position.set(Math.cos(a) * 2.55, Math.sin(a) * 2.55, 0);
+    m.rotation.set(i * 0.7, i * 1.3, 0);
+    orbit.add(m);
+    mini.push(m);
+  }
+  orbit.add(new THREE.Mesh(new THREE.TorusGeometry(2.55, 0.008, 8, 220), new THREE.MeshBasicMaterial({ color: acc, transparent: true, opacity: 0.3 })));
   return (t) => {
-    // slow organic wobble on the core
-    for (let i = 0; i < pos.count; i++) {
-      v.set(base[i * 3], base[i * 3 + 1], base[i * 3 + 2]).normalize();
-      const n = Math.sin(v.x * 3.1 + t * 1.1) * Math.sin(v.y * 2.7 + t * 0.9) * Math.sin(v.z * 3.3 + t * 1.3);
-      const r = 1.25 + n * 0.09;
-      pos.setXYZ(i, v.x * r, v.y * r, v.z * r);
-    }
-    pos.needsUpdate = true;
-    geo.computeVertexNormals();
-    core.rotation.y = t * 0.15;
-    orbit.rotation.z = t * 0.12;
-    const signer = Math.floor(t * 1.1) % N;
-    rings.forEach((m, i) => {
-      m.rotation.x += 0.01;
-      m.rotation.y += 0.013;
-      const target = i === signer ? 2.2 : 0;
-      m.material.emissiveIntensity += (target - m.material.emissiveIntensity) * 0.15;
+    coin.rotation.y = t * 0.7;
+    coin.rotation.x = Math.sin(t * 0.6) * 0.18;
+    coin.position.y = Math.sin(t * 1.1) * 0.06;
+    orbit.rotation.z = t * 0.14;
+    const signer = Math.floor(t * 1.2) % N;
+    mini.forEach((m, i) => {
+      m.rotation.x = i * 0.7 + t * 0.9;
+      m.rotation.z = t * 0.6 + i;
+      const target = i === signer ? 2.4 : 0;
+      m.material.emissiveIntensity += (target - m.material.emissiveIntensity) * 0.18;
     });
   };
 }
 
-// Zcash mood: a heavy gold coin stamped with a Z; hexagonal notes fall into
-// the shielded pool and vanish.
-function buildOrchard(THREE, root, acc) {
-  const gold = new THREE.MeshPhysicalMaterial({ color: acc, metalness: 1, roughness: 0.22, clearcoat: 0.6 });
-  const coin = new THREE.Group();
+// Zcash: gold coin, dark ring, Z with stems. Shielded notes spiral into it.
+function buildZec(THREE, root, acc) {
+  const R = 1.5;
+  const depth = 0.26;
+  const gold = new THREE.MeshPhysicalMaterial({ color: acc, metalness: 1, roughness: 0.24, clearcoat: 0.7 });
+  const dark = new THREE.MeshPhysicalMaterial({ color: 0x1a1712, metalness: 0.9, roughness: 0.3, clearcoat: 1 });
+  const coin = coinBody(THREE, { R, depth, edge: gold, face: gold });
   root.add(coin);
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.45, 0.26, 96), gold);
-  body.rotation.x = Math.PI / 2;
-  coin.add(body);
-  const rimGeo = new THREE.TorusGeometry(1.45, 0.07, 16, 120);
-  coin.add(new THREE.Mesh(rimGeo, gold));
-
-  // extruded Z on both faces
+  const ring = new THREE.Shape();
+  ring.absarc(0, 0, 1.1, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, 0.94, 0, Math.PI * 2, true);
+  ring.holes.push(hole);
+  const ext = { depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.015, bevelSegments: 3 };
+  stamp(THREE, coin, new THREE.ExtrudeGeometry(ring, { ...ext, curveSegments: 64 }), dark, depth, -0.01);
   const z = new THREE.Shape();
-  z.moveTo(-0.6, 0.7);
-  z.lineTo(0.6, 0.7);
-  z.lineTo(0.6, 0.45);
-  z.lineTo(-0.22, -0.45);
-  z.lineTo(0.6, -0.45);
-  z.lineTo(0.6, -0.7);
-  z.lineTo(-0.6, -0.7);
-  z.lineTo(-0.6, -0.45);
-  z.lineTo(0.22, 0.45);
-  z.lineTo(-0.6, 0.45);
+  const pts = [[-0.5, 0.5], [0.5, 0.5], [0.5, 0.3], [-0.16, -0.32], [0.5, -0.32], [0.5, -0.5], [-0.5, -0.5], [-0.5, -0.3], [0.16, 0.32], [-0.5, 0.32]];
+  z.moveTo(pts[0][0], pts[0][1]);
+  pts.slice(1).forEach(([x, y]) => z.lineTo(x, y));
   z.closePath();
-  const zGeo = new THREE.ExtrudeGeometry(z, { depth: 0.12, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 4 });
-  const zf = new THREE.Mesh(zGeo, gold);
-  zf.position.z = 0.12;
-  coin.add(zf);
-  const zb = zf.clone();
-  zb.rotation.y = Math.PI;
-  zb.position.z = -0.12;
-  coin.add(zb);
+  stamp(THREE, coin, new THREE.ExtrudeGeometry(z, ext), dark, depth, -0.01);
+  for (const y of [0.64, -0.64]) {
+    const stem = new THREE.Shape();
+    stem.moveTo(-0.07, y - 0.16);
+    stem.lineTo(0.07, y - 0.16);
+    stem.lineTo(0.07, y + 0.16);
+    stem.lineTo(-0.07, y + 0.16);
+    stem.closePath();
+    stamp(THREE, coin, new THREE.ExtrudeGeometry(stem, ext), dark, depth, -0.01);
+  }
 
-  const hexGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.07, 6);
+  const hexGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.06, 6);
   const notes = [];
   for (let i = 0; i < 16; i++) {
-    const m = new THREE.Mesh(hexGeo, new THREE.MeshPhysicalMaterial({ color: 0x222026, metalness: 1, roughness: 0.3, emissive: acc.clone(), emissiveIntensity: 0.25 }));
-    m.userData.phase = Math.random();
-    m.userData.a = Math.random() * Math.PI * 2;
+    const m = new THREE.Mesh(hexGeo, new THREE.MeshPhysicalMaterial({ color: 0x24211b, metalness: 1, roughness: 0.3, emissive: acc.clone(), emissiveIntensity: 0.3 }));
+    m.userData.phase = i / 16;
+    m.userData.a = i * 2.39;
     root.add(m);
     notes.push(m);
   }
   return (t) => {
-    coin.rotation.y = Math.sin(t * 0.5) * 0.9 + t * 0.25;
-    coin.rotation.x = Math.sin(t * 0.7) * 0.12;
+    coin.rotation.y = t * 0.6;
+    coin.rotation.x = Math.sin(t * 0.7) * 0.14;
+    coin.position.y = Math.sin(t * 1.0) * 0.06;
     notes.forEach((m) => {
-      const p = (m.userData.phase + t * 0.12) % 1; // 0 far away -> 1 absorbed
-      const r = 3.3 * (1 - p) + 0.2;
+      const p = (m.userData.phase + t * 0.1) % 1;
+      const r = 3.4 * (1 - p) + 0.3;
       const a = m.userData.a + t * 0.4 + p * 2.5;
       m.position.set(Math.cos(a) * r, Math.sin(a * 1.3) * 0.9 * (1 - p), Math.sin(a) * r * 0.5);
-      const s = p > 0.85 ? (1 - p) / 0.15 : 1;
-      m.scale.setScalar(Math.max(0.001, s));
-      m.rotation.x += 0.03;
-      m.rotation.z += 0.02;
+      const sc = p > 0.85 ? (1 - p) / 0.15 : 1;
+      m.scale.setScalar(Math.max(0.001, sc));
+      m.rotation.x = t * 1.8 + m.userData.a;
+      m.rotation.z = t * 1.2;
     });
   };
 }

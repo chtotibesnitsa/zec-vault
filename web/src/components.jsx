@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { ago, fmtNum, rawToUi, short, solscanAcct, solscanTx } from './api.js';
+import { brand } from './brand.js';
+
+// Link props for an event: real ones open Solscan, samples link nowhere.
+export const txLink = (e) => (e.sample || !e.sig ? {} : { href: solscanTx(e.sig), target: '_blank', rel: 'noreferrer' });
 
 const nm = (e) => (e.name?.u ? '@' + e.name.u : e.name?.x ? '@' + e.name.x : short(e.wallet));
 
@@ -159,13 +163,13 @@ function Shield() {
 }
 
 export function Emblem({ kind }) {
-  return <div className="emblem">{kind === 'shield' ? <Shield /> : <Rings />}</div>;
+  return <div className="emblem">{kind === 'zec' || kind === 'shield' ? <Shield /> : <Rings />}</div>;
 }
 
 export function eventText(e, cfg) {
   const d = cfg?.decimals ?? 6;
   const rd = cfg?.rewardDecimals ?? d;
-  const sym = '$' + (cfg?.tokenSymbol || '');
+  const sym = '$' + (cfg?.tokenSymbol && cfg.tokenSymbol !== 'VAULT' ? cfg.tokenSymbol : brand.ticker);
   const rsym = cfg && !cfg.rewardIsOwnToken ? cfg.rewardSymbol : sym;
   const sol = e.lamports ? (Number(e.lamports) / 1e9).toFixed(3) : null;
   switch (e.kind) {
@@ -177,14 +181,18 @@ export function eventText(e, cfg) {
       return { tag: 'FEES', text: `Vault claimed ${sol} SOL in creator fees` };
     case 'buyback':
       return { tag: 'BUYBACK', text: `Vault bought ${fmtNum(rawToUi(e.amountRaw, rd))} ${rsym} with ${sol} SOL` };
+    case 'burn':
+      return { tag: 'BURN', text: `Vault bought and burned ${fmtNum(rawToUi(e.amountRaw, d))} ${sym} for ${sol} SOL` };
     case 'payout':
       return { tag: 'PAID', text: `${nm(e)} received ${fmtNum(rawToUi(e.amountRaw, rd), 4)} ${rsym}` };
+    case 'join':
+      return { tag: 'JOINED', text: `${nm(e)} claimed a name${e.name?.x ? ' and linked X' : ''}` };
     default:
       return { tag: e.kind.toUpperCase(), text: '' };
   }
 }
 
-const TAGS = { buy: 'BUY', sell: 'SELL', claim: 'FEES', buyback: 'BUYBACK', payout: 'PAID' };
+const TAGS = { buy: 'BUY', sell: 'SELL', claim: 'FEES', buyback: 'BUYBACK', burn: 'BURN', payout: 'PAID', join: 'JOINED' };
 
 function hhmmss(ts) {
   const d = new Date(ts);
@@ -206,8 +214,9 @@ export function Marquee({ events, cfg }) {
   const row = items.map((e) => {
     const t = eventText(e, cfg);
     return (
-      <a key={e.id} href={solscanTx(e.sig)} target="_blank" rel="noreferrer" className={`tk-item k-${e.kind}`}>
+      <a key={e.id} {...txLink(e)} className={`tk-item k-${e.kind}`}>
         <b className="pixel">{t.tag}</b> {t.text}
+        {e.sample && <i className="sample-tag pixel">sample</i>}
       </a>
     );
   });
@@ -234,13 +243,13 @@ export function Toasts({ items, cfg }) {
       {items.map((e) => {
         const t = eventText(e, cfg);
         return (
-          <a key={e.id} className={`toast k-${e.kind}`} href={solscanTx(e.sig)} target="_blank" rel="noreferrer">
+          <a key={e.id} className={`toast k-${e.kind}`} {...txLink(e)}>
             <span className="toast-top">
               <b className="pixel">{t.tag}</b>
               <span className="pixel muted">{hhmmss(e.ts)}</span>
             </span>
             <span className="toast-text">{t.text}</span>
-            <small className="pixel">verified on solana ↗</small>
+            <small className="pixel">{e.sample ? 'sample · preview before launch' : 'verified on solana ↗'}</small>
           </a>
         );
       })}
@@ -294,8 +303,8 @@ export function FeedTable({ events, cfg, empty }) {
             <span className="log-ts">{hhmmss(e.ts)}</span>
             <span className="log-tag pixel">{TAGS[e.kind] || t.tag}</span>
             <span className="log-text">{t.text}</span>
-            <a className="log-link" href={solscanTx(e.sig)} target="_blank" rel="noreferrer">
-              {ago(e.ts)} ↗
+            <a className="log-link" {...txLink(e)}>
+              {e.sample ? <i className="sample-tag pixel">sample</i> : null} {ago(e.ts)} {e.sample ? '' : '↗'}
             </a>
           </li>
         );

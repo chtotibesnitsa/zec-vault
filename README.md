@@ -10,7 +10,7 @@ Nothing is simulated. Every row in the live feed, marquee and pop-ups is a real 
 ## How the money moves
 
 1. **Claim.** Every `CLAIM_EVERY_MINUTES` (default 30) the worker claims all Pump.fun creator fees owed to the vault wallet (through PumpPortal's local API, signed by the vault wallet).
-2. **Split.** The SOL received is booked: `REWARD_SHARE_BPS` (default 8000 = 80%) to holders, the rest to ops. Ops stays in the wallet for you to withdraw by hand.
+2. **Split.** The SOL received is booked: `REWARD_SHARE_BPS` (default 8000 = 80%) to holders, `BURN_BPS` (default 1000 = 10%) to buyback and burn, the rest to ops. The burn share buys the token and burns exactly what it bought, in a second public transaction. Ops stays in the wallet for you to withdraw by hand.
 3. **Buy.** Every `CYCLE_MINUTES` (default 5), if the holders' budget is at least `MIN_CYCLE_SOL`, the worker buys the reward token. With `REWARD_MINT` empty it buys back the vault's own coin on Pump.fun/PumpSwap. With `REWARD_MINT` set it swaps on Jupiter into that token.
 4. **Snapshot.** It reads every token account of the coin, adds them up per owner and drops pools, bonding curves and other program accounts (off-curve owners), the vault wallet, anything in `EXCLUDE_WALLETS`, and anyone under `MIN_HOLD_TOKENS`.
 5. **Pay.** Each holder is credited `pool × balance ÷ total`. Wallets owed at least `MIN_PAYOUT` are paid, biggest first, up to `MAX_RECIPIENTS_PER_CYCLE`, 8 transfers per transaction. It never sends more than the wallet holds; anything not sent stays owed for the next cycle.
@@ -45,6 +45,7 @@ Sign up at helius.dev (free plan) and copy the **Mainnet RPC URL**. The public S
 | `REWARD_MINT` | Text | empty = buy back own coin. Or a reward token mint (see below) |
 | `REWARD_SYMBOL` | Text | e.g. `zenZEC`, only if `REWARD_MINT` is set |
 | `REWARD_SHARE_BPS` | Text | `8000` |
+| `BURN_BPS` | Text | `1000` |
 | `MIN_HOLD_TOKENS` | Text | `100000` (0.01% of supply) |
 | `EXCLUDE_WALLETS` | Text | comma-separated wallets never to pay (your dev or team wallets) |
 
@@ -77,7 +78,7 @@ To let people link their X account as well:
 | `X_CLIENT_ID` | Secret | OAuth 2.0 client ID |
 | `X_CLIENT_SECRET` | Secret | OAuth 2.0 client secret |
 | `SITE_URL` | Text | your site, e.g. `https://orchard-vault.vercel.app` (where people return after X) |
-| `BRAND_NAME` | Text | `Wraith` or `Orchard`, shown in the sign-in message |
+| `BRAND_NAME` | Text | `Wraith` or `Zatoshi`, shown in the sign-in message |
 
 4. Redeploy. The **Link X** button appears in the account panel. We only read the public username and avatar (`users.read`). We never post for anyone.
 

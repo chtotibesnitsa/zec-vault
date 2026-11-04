@@ -7,6 +7,7 @@ import {
 } from '@solana/web3.js';
 import {
   createAssociatedTokenAccountIdempotentInstruction,
+  createBurnCheckedInstruction,
   createTransferCheckedInstruction,
   getAssociatedTokenAddressSync,
 } from '@solana/spl-token';
@@ -144,4 +145,19 @@ export async function sendPayoutBatch(rpc, signer, { rewardMint, rewardProgram, 
   const msg = new TransactionMessage({ payerKey: signer.publicKey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message();
   const tx = new VersionedTransaction(msg);
   return signAndSend(rpc, tx, signer);
+}
+
+// Burns tokens held by the treasury (buyback and burn). Supply goes down for good.
+export async function burnTokens(rpc, signer, { mint, program, amount, decimals, microLamports }) {
+  const m = new PublicKey(mint);
+  const programId = new PublicKey(program);
+  const ata = getAssociatedTokenAddressSync(m, signer.publicKey, false, programId);
+  const ixs = [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 30000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports }),
+    createBurnCheckedInstruction(ata, m, signer.publicKey, amount, decimals, [], programId),
+  ];
+  const { blockhash } = await rpc.getLatestBlockhash();
+  const msg = new TransactionMessage({ payerKey: signer.publicKey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message();
+  return signAndSend(rpc, new VersionedTransaction(msg), signer);
 }
