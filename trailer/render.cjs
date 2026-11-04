@@ -43,7 +43,7 @@ srv.listen(0, async () => {
   const t0 = Date.now();
   for (let i = 0; i < frames; i++) {
     await page.evaluate((t) => window.__seek(t), i / fps);
-    const buf = await page.screenshot({ type: 'jpeg', quality: 92 });
+    const buf = await page.screenshot({ type: 'jpeg', quality: 92, timeout: 0 });
     if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
     if (i % 120 === 0) console.log(`${cut} ${vault}: frame ${i}/${frames} (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
   }
