@@ -138,7 +138,7 @@ function setup(programId) {
 }
 
 // RPC shim backed by LiteSVM for the calls the cycle makes.
-function svmRpc(svm, programId, tokenAccounts) {
+function svmRpc(svm, programId, tokenAccounts, height = { value: 100 }, landed = new Set()) {
   return {
     async call(method, params) {
       if (method === 'getTokenAccountsByOwner') {
@@ -173,12 +173,29 @@ function svmRpc(svm, programId, tokenAccounts) {
     },
     async sendRaw(b64) {
       const tx = VersionedTransaction.deserialize(b64ToBytes(b64));
-      svm.sendTransaction(tx);
+      try {
+        svm.sendTransaction(tx);
+      } catch (e) {
+        e.rpc = { message: e.message }; // like a failed preflight
+        throw e;
+      }
       svm.expireBlockhash();
-      return bs58.encode(tx.signatures[0]);
+      const sig = bs58.encode(tx.signatures[0]);
+      landed.add(sig);
+      return sig;
     },
     async confirm() {
       return { ok: true };
+    },
+    async signatureStatus(sig) {
+      return landed.has(sig) ? { confirmationStatus: 'confirmed', err: null } : null;
+    },
+    async getBlockHeight() {
+      return height.value;
+    },
+    async getTransaction(sig) {
+      // Payout and burn settlement only need to know it landed.
+      return landed.has(sig) ? { meta: { preTokenBalances: [], postTokenBalances: [] }, transaction: { signatures: [sig], message: { accountKeys: [] } } } : null;
     },
   };
 }
@@ -292,6 +309,102 @@ for (const [label, programId] of [
       await burnTokens(rpc, treasury, { mint: mint.toBase58(), program: programId.toBase58(), amount: 1_250_000n, decimals: 6, microLamports: 1000 });
       expect(balanceOf(mint, treasury.publicKey)).toBe(3_750_000n);
       expect(supply()).toBe(before - 1_250_000n);
+    });
+  });
+}
+
+// A payout whose confirmation times out must never be paid twice.
+for (const [label, programId] of [
+  ['SPL Token', TOKEN_PROGRAM_ID],
+  ['Token-2022', TOKEN_2022_PROGRAM_ID],
+]) {
+  describe(`slow confirmations (${label})`, () => {
+    const make = () => {
+      const { svm, newMint, mintTo, balanceOf } = setup(programId);
+      const treasury = Keypair.generate();
+      svm.airdrop(treasury.publicKey, BigInt(LAMPORTS_PER_SOL));
+      const mint = newMint(6);
+      const alice = Keypair.generate().publicKey;
+      const accounts = [mintTo(mint, alice, 500_000_000_000n), mintTo(mint, treasury.publicKey, 10_000_000n)];
+      const vault = new Vault(fakeState(), {
+        TOKEN_MINT: mint.toBase58(),
+        SOLANA_RPC_URL: 'x',
+        TREASURY_SECRET_KEY: bs58.encode(treasury.secretKey),
+        CLAIM_EVERY_MINUTES: '100000',
+      });
+      const height = { value: 100 };
+      const landed = new Set();
+      const rpc = svmRpc(svm, programId, () => accounts, height, landed);
+      vault.makeRpc = () => rpc;
+      vault.set('last_claim_at', Date.now());
+      const run = async () => {
+        vault.set('last_cycle_at', '0');
+        await vault.tick();
+      };
+      return { vault, rpc, height, landed, alice, mint, balanceOf, svm, treasury };
+    };
+
+    it('lands late: settled once from pending, never resent', async () => {
+      const t = make();
+      t.vault.set('reward_pool_raw', '2000000');
+      t.rpc.confirm = async () => ({ ok: false, err: 'timeout' }); // it lands, but we never hear back in time
+      t.vault.set('last_cycle_at', '0');
+      await t.vault.tick();
+      expect(t.balanceOf(t.mint, t.alice)).toBe(500_000_000_000n + 2_000_000n);
+      expect(Boolean(t.vault.get('pending'))).toBe(true);
+      expect(t.vault.holder(t.alice.toBase58()).owed).toBe('2'); // not yet settled
+
+      t.rpc.confirm = async () => ({ ok: true });
+      t.vault.set('last_cycle_at', '0');
+      await t.vault.tick(); // settles the pending payout, does not pay again
+      expect(t.balanceOf(t.mint, t.alice)).toBe(500_000_000_000n + 2_000_000n);
+      expect(t.vault.holder(t.alice.toBase58()).owed).toBe('0');
+      expect(t.vault.holder(t.alice.toBase58()).paid).toBe('2');
+      expect(t.vault.get('pending')).toBe('');
+    });
+
+    it('never lands: waits until the blockhash expires, then pays once', async () => {
+      const t = make();
+      t.vault.set('reward_pool_raw', '2000000');
+      const realSend = t.rpc.sendRaw;
+      t.rpc.sendRaw = async (b64) => bs58.encode(VersionedTransaction.deserialize(b64ToBytes(b64)).signatures[0]); // dropped
+      t.rpc.confirm = async () => ({ ok: false, err: 'timeout' });
+      t.vault.set('last_cycle_at', '0');
+      await t.vault.tick();
+      expect(t.balanceOf(t.mint, t.alice)).toBe(500_000_000_000n);
+
+      // Still inside the blockhash window: no new payout may be sent.
+      t.rpc.sendRaw = realSend;
+      t.rpc.confirm = async () => ({ ok: true });
+      t.vault.set('last_cycle_at', '0');
+      await t.vault.tick();
+      expect(t.balanceOf(t.mint, t.alice)).toBe(500_000_000_000n);
+      expect(Boolean(t.vault.get('pending'))).toBe(true);
+
+      // Blockhash expired: the dropped payout is released and paid exactly once.
+      t.height.value = 1e12;
+      t.vault.set('last_cycle_at', '0');
+      await t.vault.tick();
+      expect(t.balanceOf(t.mint, t.alice)).toBe(500_000_000_000n + 2_000_000n);
+      expect(t.vault.holder(t.alice.toBase58()).paid).toBe('2');
+      expect(t.vault.holder(t.alice.toBase58()).owed).toBe('0');
+    });
+
+    it('burns tokens owed to the burn and keeps them out of payouts', async () => {
+      const t = make();
+      const supply = () => MintLayout.decode(Buffer.from(t.svm.getAccount(t.mint).data).subarray(0, MINT_SIZE)).supply;
+      const before = supply();
+      t.vault.set('burn_owed_raw', '3000000'); // bought for burning, burn not done yet
+      t.vault.set('burn_owed_lamports', '1000');
+      t.vault.set('reward_pool_raw', '7000000');
+      t.vault.set('last_cycle_at', '0');
+      await t.vault.tick();
+      expect(supply()).toBe(before - 3_000_000n);
+      expect(t.vault.get('burn_owed_raw')).toBe('0');
+      expect(t.balanceOf(t.mint, t.alice)).toBe(500_000_000_000n + 7_000_000n);
+      expect(t.balanceOf(t.mint, t.treasury.publicKey)).toBe(0n);
+      const s = await t.vault.stats();
+      expect(s.burned).toBe('3');
     });
   });
 }

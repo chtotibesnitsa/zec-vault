@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
-// Real-time 3D hero. The scene is drawn twice: as a glossy WebGL render and
-// as ASCII characters on top. The pointer is a "decryption lens": inside it
+// Real-time 3D hero. The scene is drawn as a glossy WebGL render and as
+// ASCII characters (a shader pass). The pointer is a "decryption lens": inside it
 // you see the real object, outside it you see the encrypted ASCII view.
 // three.js is loaded lazily so the first paint stays fast.
 
-export default function Hero3D({ kind, accent, accent2, manual = false, hint = true }) {
+export default function Hero3D({ kind, accent, accent2, manual = false, hint = true, dist = 8.2 }) {
   const wrap = useRef(null);
   const [failed, setFailed] = useState(false);
 
@@ -14,11 +14,10 @@ export default function Hero3D({ kind, accent, accent2, manual = false, hint = t
     let cancelled = false;
     (async () => {
       try {
-        const THREE = await import('three');
-        const { AsciiEffect } = await import('three/examples/jsm/effects/AsciiEffect.js');
-        const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
+        const kit = await import('./3d/kit.js');
+        await kit.fontsReady();
         if (cancelled || !wrap.current) return;
-        stop = mount(wrap.current, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2, manual });
+        stop = mount(wrap.current, { kit, kind, accent, accent2, manual, dist });
       } catch (e) {
         console.warn('3D hero unavailable', e);
         setFailed(true);
@@ -28,7 +27,7 @@ export default function Hero3D({ kind, accent, accent2, manual = false, hint = t
       cancelled = true;
       stop();
     };
-  }, [kind, accent, accent2, manual]);
+  }, [kind, accent, accent2, manual, dist]);
 
   if (failed) return null;
   return (
@@ -36,48 +35,113 @@ export default function Hero3D({ kind, accent, accent2, manual = false, hint = t
       <div className="lens-ring" />
       {hint && (
         <div className="hero3d-hint">
-          <span className="blink">▮</span> move to decrypt
+          <span className="blink">▮</span> move your pointer over the coin
         </div>
       )}
     </div>
   );
 }
 
-function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2, manual }) {
+// The ASCII view is one GPU pass: the scene renders into a texture, and a
+// full-screen shader turns each character cell into a glyph from a small
+// atlas (by brightness), showing the real render inside the lens. No pixel
+// readback and no DOM text, so it costs about as much as the render itself.
+const VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+const FRAG = `
+uniform sampler2D tScene; uniform sampler2D tGlyph;
+uniform vec2 res; uniform vec2 cell; uniform vec2 lens; uniform float lensR; uniform float feather;
+uniform vec3 ink; uniform float glyphs;
+varying vec2 vUv;
+void main() {
+  vec2 p = vUv * res;
+  vec2 ci = floor(p / cell);
+  vec4 sc = texture2D(tScene, (ci + 0.5) * cell / res);
+  float lum = dot(sc.rgb, vec3(0.299, 0.587, 0.114));
+  float l = 1.0 - exp(-lum * 2.4);
+  float gi = floor(clamp(l * 1.12, 0.0, 0.999) * glyphs);
+  vec2 g = fract(p / cell);
+  float m = texture2D(tGlyph, vec2((gi + g.x) / glyphs, g.y)).r * step(0.02, sc.a);
+  vec3 ascii = ink * m * (0.5 + l * 0.9);
+  vec4 real = texture2D(tScene, vUv);
+  float k = smoothstep(lensR, lensR - feather, distance(p, lens));
+  gl_FragColor = vec4(mix(ascii, real.rgb, k), mix(m * 0.95, real.a, k));
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+
+function glyphAtlas(THREE, chars) {
+  const W = 48;
+  const H = 80;
+  const c = document.createElement('canvas');
+  c.width = W * chars.length;
+  c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, c.width, H);
+  g.fillStyle = '#fff';
+  g.font = '700 62px "JetBrains Mono", ui-monospace, Menlo, monospace';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  [...chars].forEach((ch, i) => g.fillText(ch, i * W + W / 2, H / 2 + 3));
+  const t = new THREE.CanvasTexture(c);
+  t.minFilter = THREE.LinearFilter;
+  t.generateMipmaps = false;
+  return t;
+}
+
+function mount(el, { kit, kind, accent, accent2, manual, dist = 8.2 }) {
+  const { THREE } = kit;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: false });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-  renderer.setClearColor(0x000000, 1); // opaque black reads as blank in the ASCII pass
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.35;
-  renderer.domElement.className = 'hero3d-solid';
+  const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: !!manual });
+  const dpr = Math.min(window.devicePixelRatio || 1, manual ? 2 : 1.5);
+  renderer.setPixelRatio(dpr);
+  renderer.setClearColor(0x000000, 0);
+  kit.setupRenderer(renderer);
+  renderer.toneMappingExposure = 1.3;
+  renderer.domElement.className = 'hero3d-gl';
 
   const scene = new THREE.Scene();
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-
+  scene.environment = kit.envFor(renderer);
   const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
-  camera.position.set(0, 0.3, 8.2);
+  camera.position.set(0, 0.3, dist);
 
   const acc = new THREE.Color(accent);
   const acc2 = new THREE.Color(accent2);
-  const key = new THREE.DirectionalLight(acc2, 2.4);
+  const key = new THREE.DirectionalLight(acc2, 2.2);
   key.position.set(3, 4, 5);
-  const rim = new THREE.PointLight(acc, 60, 20);
+  const rim = new THREE.PointLight(acc, 40, 20);
   rim.position.set(-3.5, -1, -2.5);
-  const fill = new THREE.PointLight(0xfff1e0, 18, 20);
+  const fill = new THREE.PointLight(0xfff1e0, 14, 20);
   fill.position.set(4, -3, 2);
-  scene.add(key, rim, fill, new THREE.AmbientLight(0xffffff, 0.15));
+  scene.add(key, rim, fill, new THREE.AmbientLight(0xffffff, 0.12));
 
   const root = new THREE.Group();
   scene.add(root);
-  const tick = kind === 'zec' || kind === 'shield' ? buildZec(THREE, root, acc) : buildXmr(THREE, root, acc);
+  const tick = kind === 'zec' || kind === 'shield' ? buildZec(THREE, kit, root, acc) : buildXmr(THREE, root, acc);
 
-  // ASCII layer (encrypted view)
-  const ascii = new AsciiEffect(renderer, ' .:-+*=%@#', { invert: true, resolution: 0.17 });
-  ascii.domElement.className = 'hero3d-ascii';
+  const rt = new THREE.WebGLRenderTarget(2, 2, { samples: 4, type: THREE.HalfFloatType });
+  const post = new THREE.ShaderMaterial({
+    vertexShader: VERT,
+    fragmentShader: FRAG,
+    transparent: true,
+    depthTest: false,
+    uniforms: {
+      tScene: { value: rt.texture },
+      tGlyph: { value: glyphAtlas(THREE, ' .:-+*=%@#') },
+      glyphs: { value: 10 },
+      res: { value: new THREE.Vector2(1, 1) },
+      cell: { value: new THREE.Vector2(7, 11.5) },
+      lens: { value: new THREE.Vector2() },
+      lensR: { value: 120 },
+      feather: { value: 10 },
+      ink: { value: acc.clone().multiplyScalar(1.6) },
+    },
+  });
+  const quadScene = new THREE.Scene();
+  quadScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post));
+  const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   el.prepend(renderer.domElement);
-  el.prepend(ascii.domElement);
+  const ringEl = el.querySelector('.lens-ring');
 
   let w = 0;
   let h = 0;
@@ -87,11 +151,28 @@ function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2,
     h = Math.max(1, Math.round(r.height));
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    ascii.setSize(w, h); // also sizes the WebGL canvas
+    renderer.setSize(w, h, false);
+    rt.setSize(Math.round(w * dpr), Math.round(h * dpr));
+    post.uniforms.res.value.set(w * dpr, h * dpr);
+    const cw = (w < 520 ? 6 : 7) * dpr;
+    post.uniforms.cell.value.set(cw, cw * 1.65);
+    post.uniforms.feather.value = 10 * dpr;
+    const lr = ringEl ? ringEl.getBoundingClientRect().width / 2 : 118;
+    post.uniforms.lensR.value = Math.max(20, lr) * dpr;
   };
   resize();
   const ro = new ResizeObserver(resize);
   ro.observe(el);
+
+  const draw = (mx, my) => {
+    post.uniforms.lens.value.set(mx * w * dpr, (1 - my) * h * dpr);
+    renderer.setRenderTarget(rt);
+    renderer.clear();
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    renderer.clear();
+    renderer.render(quadScene, quadCam);
+  };
 
   // decryption lens follows the pointer; drifts on its own on touch screens
   let mx = 0.62;
@@ -101,6 +182,7 @@ function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2,
   let lastMove = 0;
   const onMove = (e) => {
     const r = el.getBoundingClientRect();
+    if (e.clientY < r.top - 100 || e.clientY > r.bottom + 100) return;
     tx = (e.clientX - r.left) / r.width;
     ty = (e.clientY - r.top) / r.height;
     lastMove = performance.now();
@@ -113,11 +195,10 @@ function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2,
 
   const clock = new THREE.Clock();
   let raf = 0;
-  let frame = 0;
+  let lastCss = '';
   const loop = () => {
     raf = requestAnimationFrame(loop);
     if (!visible || document.hidden) return;
-    frame++;
     const t = clock.getElapsedTime();
     if (performance.now() - lastMove > 2500) {
       tx = 0.5 + Math.sin(t * 0.45) * 0.28;
@@ -125,14 +206,16 @@ function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2,
     }
     mx += (tx - mx) * 0.08;
     my += (ty - my) * 0.08;
-    el.style.setProperty('--mx', (mx * 100).toFixed(2) + '%');
-    el.style.setProperty('--my', (my * 100).toFixed(2) + '%');
+    const css = (mx * 100).toFixed(1) + '|' + (my * 100).toFixed(1);
+    if (css !== lastCss) {
+      lastCss = css;
+      el.style.setProperty('--mx', (mx * 100).toFixed(1) + '%');
+      el.style.setProperty('--my', (my * 100).toFixed(1) + '%');
+    }
     root.rotation.y += ((mx - 0.5) * 0.6 - root.rotation.y) * 0.04;
     root.rotation.x += ((my - 0.5) * 0.4 - root.rotation.x) * 0.04;
     tick(t);
-    // ASCII render draws the WebGL frame too; on slow phones refresh it every other frame
-    if (w < 520 && frame % 2) renderer.render(scene, camera);
-    else ascii.render(scene, camera);
+    draw(mx, my);
   };
   if (manual) {
     // Trailer capture: the caller sets the time for every frame.
@@ -144,13 +227,14 @@ function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2,
       root.rotation.y = (lx - 0.5) * 0.6;
       root.rotation.x = (ly - 0.5) * 0.4;
       tick(t);
-      ascii.render(scene, camera);
+      resize();
+      draw(lx, ly);
     };
     el.__seek(0);
     el.dataset.ready = '1';
   } else if (reduced) {
     tick(1.2);
-    ascii.render(scene, camera);
+    draw(mx, my);
   } else loop();
 
   return () => {
@@ -158,9 +242,9 @@ function mount(el, { THREE, AsciiEffect, RoomEnvironment, kind, accent, accent2,
     ro.disconnect();
     io.disconnect();
     window.removeEventListener('pointermove', onMove);
+    rt.dispose();
+    post.dispose();
     renderer.dispose();
-    pmrem.dispose();
-    ascii.domElement.remove();
     renderer.domElement.remove();
   };
 }
@@ -260,36 +344,12 @@ function buildXmr(THREE, root, acc) {
   };
 }
 
-// Zcash: gold coin, dark ring, Z with stems. Shielded notes spiral into it.
-function buildZec(THREE, root, acc) {
-  const R = 1.5;
-  const depth = 0.26;
-  const gold = new THREE.MeshPhysicalMaterial({ color: acc, metalness: 1, roughness: 0.24, clearcoat: 0.7 });
-  const dark = new THREE.MeshPhysicalMaterial({ color: 0x1a1712, metalness: 0.9, roughness: 0.3, clearcoat: 1 });
-  const coin = coinBody(THREE, { R, depth, edge: gold, face: gold });
+// $ZATS: the detailed minted coin from the shared kit (gold, enamel ring
+// with legend, Z with stems). Shielded notes spiral into it.
+function buildZec(THREE, kit, root, acc) {
+  const coin = kit.zatsCoin('hi');
+  coin.scale.setScalar(1.5);
   root.add(coin);
-  const ring = new THREE.Shape();
-  ring.absarc(0, 0, 1.1, 0, Math.PI * 2, false);
-  const hole = new THREE.Path();
-  hole.absarc(0, 0, 0.94, 0, Math.PI * 2, true);
-  ring.holes.push(hole);
-  const ext = { depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.015, bevelSegments: 3 };
-  stamp(THREE, coin, new THREE.ExtrudeGeometry(ring, { ...ext, curveSegments: 64 }), dark, depth, -0.01);
-  const z = new THREE.Shape();
-  const pts = [[-0.5, 0.5], [0.5, 0.5], [0.5, 0.3], [-0.16, -0.32], [0.5, -0.32], [0.5, -0.5], [-0.5, -0.5], [-0.5, -0.3], [0.16, 0.32], [-0.5, 0.32]];
-  z.moveTo(pts[0][0], pts[0][1]);
-  pts.slice(1).forEach(([x, y]) => z.lineTo(x, y));
-  z.closePath();
-  stamp(THREE, coin, new THREE.ExtrudeGeometry(z, ext), dark, depth, -0.01);
-  for (const y of [0.64, -0.64]) {
-    const stem = new THREE.Shape();
-    stem.moveTo(-0.07, y - 0.16);
-    stem.lineTo(0.07, y - 0.16);
-    stem.lineTo(0.07, y + 0.16);
-    stem.lineTo(-0.07, y + 0.16);
-    stem.closePath();
-    stamp(THREE, coin, new THREE.ExtrudeGeometry(stem, ext), dark, depth, -0.01);
-  }
 
   const hexGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.06, 6);
   const notes = [];

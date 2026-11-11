@@ -9,5 +9,15 @@
   "triggers": { "crons": ["* * * * *"] },
   "durable_objects": { "bindings": [{ "name": "VAULT", "class_name": "Vault" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Vault"] }],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Plain settings only. TOKEN_MINT is added on launch day.
+  "vars": {
+    "TOKEN_SYMBOL": "ZATS",
+    "BRAND_NAME": "Zatoshi",
+    "CLAIM_EVERY_MINUTES": "5",
+    "REWARD_SHARE_BPS": "8000",
+    "BURN_BPS": "1000",
+    "MIN_HOLD_TOKENS": "100000",
+    "SITE_URL": "https://zec-vault.vercel.app"
+  }
 }

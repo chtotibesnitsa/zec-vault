@@ -1,10 +1,12 @@
 // Social proof building blocks for the front page. Everything renders from
 // real feed events and stats; preview items are badged SAMPLE and unlinked.
 import { useEffect, useState } from 'react';
+import { AtBlock, Candles, CoinFountain, HolderGlobe, LinkChain, XBadge } from './obj3d.jsx';
 import { brand } from './brand.js';
 import { ago, fmtNum } from './api.js';
 import { Countdown, Counter, eventText, txLink } from './components.jsx';
 import { Px } from './pixel.jsx';
+import { KIND_TONE } from './nav.jsx';
 
 function h32(s) {
   let h = 2166136261;
@@ -76,7 +78,7 @@ export function FloatingProof({ events, cfg }) {
       {show.map((e, k) => {
         const t = eventText(e, cfg);
         return (
-          <a key={e.id + '-' + i} className={`floater f${k} k-${e.kind}`} {...txLink(e)} tabIndex={-1}>
+          <a key={e.id + '-' + i} className={`floater f${k} k-${e.kind} tone-${KIND_TONE[e.kind] || 'vault'}`} {...txLink(e)} tabIndex={-1}>
             <Identicon seed={seedOf(e)} size={30} />
             <span className="fl-body">
               <b className="pixel">{t.tag}</b>
@@ -104,7 +106,7 @@ export function PayoutPulse({ s, sample }) {
   const R = 46;
   const C = 2 * Math.PI * R;
   return (
-    <div className="pulse card">
+    <div className="pulse card tone-pay">
       <svg viewBox="0 0 120 120" className="pulse-ring" aria-hidden="true">
         <circle cx="60" cy="60" r={R} className="pr-bg" />
         <circle cx="60" cy="60" r={R} className="pr-fg" style={{ strokeDasharray: C, strokeDashoffset: C * (1 - p) }} />
@@ -119,22 +121,30 @@ export function PayoutPulse({ s, sample }) {
 }
 
 // Live numbers for every feature, not just money.
+const USAGE_OBJ = {
+  'paid to holders': <CoinFountain />,
+  'trades in 24h': <Candles />,
+  'wallets earning': <HolderGlobe />,
+  'names claimed': <AtBlock />,
+  'X accounts linked': <XBadge />,
+  'joined by invite': <LinkChain />,
+};
 export function UsageStrip({ s, sample }) {
   const c = s?.community || {};
   const rs = '$' + brand.ticker;
   const items = [
-    ['coins', 'paid to holders', <Counter key="a" value={s?.rewardsPaid || 0} />, rs],
-    ['swap', 'trades in 24h', <Counter key="b" value={s?.trades24h || 0} format={(v) => Math.round(v).toLocaleString()} />, 'on-chain'],
-    ['users', 'wallets earning', <Counter key="c" value={s?.holders || 0} format={(v) => Math.round(v).toLocaleString()} />, 'right now'],
-    ['eye', 'names claimed', <Counter key="d" value={c.named || 0} format={(v) => Math.round(v).toLocaleString()} />, 'signed in by wallet'],
-    ['bolt', 'X accounts linked', <Counter key="e" value={c.xLinked || 0} format={(v) => Math.round(v).toLocaleString()} />, 'public profiles'],
-    ['flame', 'joined by invite', <Counter key="f" value={c.invited || 0} format={(v) => Math.round(v).toLocaleString()} />, 'referral links'],
+    ['coins', 'paid to holders', <Counter key="a" value={s?.rewardsPaid || 0} />, rs, 'pay'],
+    ['swap', 'trades in 24h', <Counter key="b" value={s?.trades24h || 0} format={(v) => Math.round(v).toLocaleString()} />, 'on-chain', 'trade'],
+    ['users', 'wallets earning', <Counter key="c" value={s?.holders || 0} format={(v) => Math.round(v).toLocaleString()} />, 'right now', 'people'],
+    ['eye', 'names claimed', <Counter key="d" value={c.named || 0} format={(v) => Math.round(v).toLocaleString()} />, 'signed in by wallet', 'people'],
+    ['bolt', 'X accounts linked', <Counter key="e" value={c.xLinked || 0} format={(v) => Math.round(v).toLocaleString()} />, 'public profiles', 'people'],
+    ['users', 'joined by invite', <Counter key="f" value={c.invited || 0} format={(v) => Math.round(v).toLocaleString()} />, 'referral links', 'people'],
   ];
   return (
     <div className={`usage ${sample ? 'is-sample' : ''}`}>
-      {items.map(([ic, label, v, hint]) => (
-        <div key={label} className="usage-item">
-          <Px name={ic} size={22} />
+      {items.map(([ic, label, v, hint, tone]) => (
+        <div key={label} className={`usage-item tone-${tone}`}>
+          {USAGE_OBJ[label]}
           <b className="mono">{v}</b>
           <span className="pixel muted">{label}</span>
           <span className="small muted">{hint}</span>

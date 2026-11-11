@@ -1,12 +1,23 @@
 import { createRoot } from 'react-dom/client';
-import '@fontsource-variable/anybody/standard.css';
-import '@fontsource-variable/instrument-sans/standard.css';
+import '@fontsource/chakra-petch/500.css';
+import '@fontsource/chakra-petch/600.css';
+import '@fontsource/chakra-petch/700.css';
+import '@fontsource/ibm-plex-sans/400.css';
+import '@fontsource/ibm-plex-sans/500.css';
+import '@fontsource/ibm-plex-sans/600.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import '@fontsource/ibm-plex-mono/600.css';
-import '@fontsource/vt323/400.css';
+import '@fontsource/silkscreen/400.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource/jetbrains-mono/700.css';
 import App from './App.jsx';
 import './styles.css';
 import './v5.css';
+import './v6.css';
+import './v7.css';
+import './v8.css';
+import './v9.css';
 
 createRoot(document.getElementById('root')).render(<App />);

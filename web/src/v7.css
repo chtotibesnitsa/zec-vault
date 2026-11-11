@@ -1,0 +1,357 @@
+/* ==========================================================================
+   v7: liquid glass + depth.
+   Every surface is a layered glass pane: a tinted translucent fill, live
+   background blur, a bright top edge, a dark bottom edge, a pointer-tracked
+   specular light and a soft colored glow in the card's own color (--tone).
+   Behind the panes sits a slow light field so the glass has something to
+   refract. Cards tilt toward the pointer, sections rise into place.
+   Readability first: fills stay at ~60% opacity on dark, text never sits on
+   raw blur. Lite mode, reduced motion and reduced transparency fall back to
+   solid surfaces.
+   ========================================================================== */
+
+:root {
+  --glass-fill: color-mix(in srgb, var(--card) 62%, transparent);
+  --glass-fill-2: color-mix(in srgb, var(--card2, var(--card)) 70%, transparent);
+  --glass-edge: rgba(255, 255, 255, 0.1);
+  --glass-hi: rgba(255, 255, 255, 0.16);
+  --glass-lo: rgba(0, 0, 0, 0.38);
+  --glass-blur: 18px;
+  --glass-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sy: 0;
+}
+:root[data-theme='light'] {
+  --glass-fill: color-mix(in srgb, var(--card) 66%, transparent);
+  --glass-edge: rgba(255, 255, 255, 0.7);
+  --glass-hi: rgba(255, 255, 255, 0.9);
+  --glass-lo: rgba(60, 40, 10, 0.12);
+}
+
+/* ---------- the light field ---------- */
+.ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.orb {
+  position: absolute;
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 50%;
+  opacity: 0.8;
+  will-change: transform;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--c) 40%, transparent), transparent 72%);
+  animation: orbDrift var(--t, 38s) ease-in-out infinite alternate;
+}
+.o-pay { --c: var(--c-pay); left: -8vmax; top: -10vmax; --t: 41s; }
+.o-vault { --c: var(--c-vault); right: -12vmax; top: 30vh; --t: 47s; animation-delay: -12s; }
+.o-people { --c: var(--c-people); left: 10vw; bottom: -20vmax; --t: 53s; animation-delay: -20s; opacity: 0.6; }
+.o-burn { --c: var(--c-burn); right: 10vw; bottom: -30vmax; --t: 44s; animation-delay: -7s; opacity: 0.3; }
+@keyframes orbDrift {
+  0% { transform: translate3d(0, calc(var(--sy) * -0.04px), 0) scale(1); }
+  50% { transform: translate3d(6vmax, calc(var(--sy) * -0.04px + 4vmax), 0) scale(1.12); }
+  100% { transform: translate3d(-4vmax, calc(var(--sy) * -0.04px - 3vmax), 0) scale(0.94); }
+}
+.grain {
+  position: absolute;
+  inset: -50%;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- floating glass objects (CSS 3D) ---------- */
+.floaters3d { position: absolute; inset: 0; perspective: 900px; }
+.g3d {
+  position: absolute;
+  transform-style: preserve-3d;
+  animation: g3dFloat var(--ft, 14s) ease-in-out infinite alternate;
+  translate: 0 calc(var(--sy) * var(--par, -0.12) * 1px);
+}
+.g3d-spin { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; animation: g3dSpin var(--st, 26s) linear infinite; }
+@keyframes g3dFloat { from { transform: translateY(-14px) rotate(-4deg); } to { transform: translateY(16px) rotate(5deg); } }
+@keyframes g3dSpin { from { transform: rotateX(18deg) rotateY(0deg) rotateZ(8deg); } to { transform: rotateX(18deg) rotateY(360deg) rotateZ(8deg); } }
+
+.gcube { --s: 54px; width: var(--s); height: var(--s); }
+.gcube .face {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--c) 34%, rgba(255, 255, 255, 0.16)), color-mix(in srgb, var(--c) 8%, transparent) 60%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), inset 0 0 18px color-mix(in srgb, var(--c) 40%, transparent);
+  backface-visibility: visible;
+}
+.gcube .f { transform: translateZ(calc(var(--s) / 2)); }
+.gcube .b { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
+.gcube .l { transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); }
+.gcube .r { transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); }
+.gcube .t { transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); }
+.gcube .u { transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); }
+.fc1 { --c: var(--c-vault); left: 4vw; top: 62vh; --ft: 13s; --st: 30s; --par: -0.08; }
+.fc2 { --c: var(--c-people); --s: 34px; right: 7vw; top: 34vh; --ft: 11s; --st: 22s; --par: -0.18; }
+
+.gring { width: 92px; height: 92px; }
+.gring i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 9px solid transparent;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--c) 70%, #fff), color-mix(in srgb, var(--c) 30%, transparent)) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0);
+  opacity: 0.55;
+  box-shadow: 0 0 30px color-mix(in srgb, var(--c) 40%, transparent);
+}
+.fr1 { --c: var(--c-pay); right: 3vw; top: 76vh; --ft: 16s; --st: 34s; --par: -0.1; }
+.fr2 { --c: var(--c-trade); --s: 60px; left: 9vw; top: 20vh; width: 58px; height: 58px; --ft: 12s; --st: 24s; --par: -0.22; }
+
+.gcoin { width: 70px; height: 70px; left: 46vw; top: 88vh; --ft: 15s; --st: 18s; --par: -0.3; }
+.gcoin i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transform: translateZ(var(--z));
+  background: color-mix(in srgb, var(--c-pay) 55%, #2a1a02);
+}
+.gcoin i.cap {
+  background: radial-gradient(circle at 35% 30%, #fff6d8 0 8%, var(--c-pay) 30%, color-mix(in srgb, var(--c-pay) 60%, #3a2300) 75%);
+  box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--c-pay) 70%, #000), inset 0 0 0 7px rgba(255, 255, 255, 0.25);
+}
+
+/* ---------- glass surfaces ---------- */
+.card, .lpanel, .proofbar, .burn-card, .faq details, .spec, .buy-card, .estimator, .swap, .flow-viz,
+.st-step, .hm-step, .usage-item, .key-item, .stats-4 .stat, .holdcheck, .earners, .h5-kicker,
+.toast, .modal, .swapcard, .pulse, .glass {
+  background:
+    radial-gradient(520px circle at var(--mx, 20%) var(--my, -30%), rgba(255, 255, 255, 0.075), transparent 55%),
+    linear-gradient(162deg, color-mix(in srgb, var(--tone) 11%, rgba(255, 255, 255, 0.07)) 0%, rgba(255, 255, 255, 0.018) 36%, transparent 58%, color-mix(in srgb, var(--tone) 7%, transparent) 100%),
+    var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),
+    inset 0 -1px 0 var(--glass-lo),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 9%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 24px 48px -24px rgba(0, 0, 0, 0.8),
+    0 0 46px -26px color-mix(in srgb, var(--tone) 55%, transparent);
+  transition: transform 0.45s var(--glass-ease), box-shadow 0.35s var(--glass-ease), border-color 0.35s;
+}
+/* the burn card keeps its warm corner light */
+.burn-card { background: radial-gradient(80% 120% at 0% 0%, color-mix(in srgb, var(--burn) 16%, transparent), transparent 60%), radial-gradient(520px circle at var(--mx, 20%) var(--my, -30%), rgba(255, 255, 255, 0.07), transparent 55%), var(--glass-fill); }
+/* panes inside panes are a touch clearer */
+.swap-box, .burn-row, .hc-in, .lookup input {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.02)), var(--glass-fill-2);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+.proofbar .pb-item { background: transparent; border-color: rgba(255, 255, 255, 0.06); box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.modal, .toast { --glass-fill: color-mix(in srgb, var(--term) 78%, transparent); }
+
+/* lift + edge light on hover */
+.lpanel:hover, .burn-card:hover, .spec:hover, .buy-card:hover, .estimator:hover, .swap:hover, .flow-viz:hover,
+.st-step:hover, .hm-step:hover, .usage-item:hover, .key-item:hover, .stats-4 .stat:hover, .holdcheck:hover, .faq details:hover, .earners:hover, .swapcard:hover {
+  border-color: color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.12));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 var(--glass-lo),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
+    0 2px 4px rgba(0, 0, 0, 0.35),
+    0 34px 60px -26px rgba(0, 0, 0, 0.85),
+    0 0 60px -20px color-mix(in srgb, var(--tone) 60%, transparent);
+}
+
+/* ---------- 3D tilt ---------- */
+.pb-item, .st-step, .usage-item, .burn-card, .buy-card, .stat, .hm-step, .key-item, .estimator, .swapcard, .spec, .lpanel, .flow-viz, .swap, .holdcheck, .faq details, .earn-row, .glass-tilt {
+  transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateZ(0);
+  transform-style: preserve-3d;
+  /* entrance animations must not hold the transform after they finish */
+  animation-fill-mode: backwards !important;
+}
+.is-tilt { transition: transform 0.12s linear, box-shadow 0.35s var(--glass-ease), border-color 0.35s !important; }
+.is-tilt.st-step, .is-tilt.hm-step, .is-tilt.usage-item, .is-tilt.key-item, .is-tilt.stat, .is-tilt.buy-card, .is-tilt.pb-item {
+  transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateZ(0) translateY(-4px);
+}
+/* icons float above the glass when a card tilts */
+.is-tilt .pb-ic, .is-tilt .ui-ic, .is-tilt .st-ic, .is-tilt .hm-ic, .is-tilt .hl-ic { transform: translateZ(28px) scale(1.06); }
+.pb-ic, .ui-ic, .st-ic, .hm-ic, .hl-ic, .shead-ic, .phead-ic { transition: transform 0.4s var(--glass-ease); }
+
+/* icon chips become little glass gems */
+.pb-ic, .ui-ic, .st-ic, .hm-ic, .hl-ic, .shead-ic, .phead-ic {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 52%),
+    color-mix(in srgb, var(--tone) 22%, rgba(0, 0, 0, 0.2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 45%, transparent),
+    0 6px 16px -6px color-mix(in srgb, var(--tone) 70%, transparent);
+}
+
+/* ---------- scroll reveal ---------- */
+.rv { opacity: 0; transform: perspective(1000px) translateY(34px) rotateX(9deg) scale(0.975) !important; }
+.rv.rv-in {
+  opacity: 1;
+  transform: perspective(1000px) translateY(0) rotateX(0) scale(1) !important;
+  transition: opacity 0.6s var(--glass-ease) var(--rv-d, 0ms), transform 0.8s var(--glass-ease) var(--rv-d, 0ms) !important;
+}
+
+/* ---------- glass buttons ---------- */
+.btn { position: relative; overflow: hidden; isolation: isolate; }
+.btn:not(.btn-ghost) {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 80%, #fff) 0%, var(--accent) 46%, color-mix(in srgb, var(--accent) 82%, #000) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -3px 8px color-mix(in srgb, var(--accent-deep) 60%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 4px 0 var(--accent-deep),
+    0 14px 30px -12px var(--accent),
+    0 3px 8px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s var(--glass-ease), box-shadow 0.25s var(--glass-ease), filter 0.25s;
+}
+/* gloss: the bright upper lens of a glass bead */
+.btn::before {
+  content: '';
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  top: 1px;
+  height: 50%;
+  z-index: -1;
+  border-radius: 999px 999px 60% 60% / 999px 999px 100% 100%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0));
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+/* light sweep on hover */
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: 1;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.5) 46%, rgba(255, 255, 255, 0.08) 54%, transparent 66%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.btn:hover::after { transform: translateX(120%); transition: transform 0.8s var(--glass-ease); }
+.btn:not(.btn-ghost):hover {
+  transform: translateY(-2px) scale(1.015);
+  filter: saturate(1.1) brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -3px 8px color-mix(in srgb, var(--accent-deep) 60%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.3),
+    0 6px 0 var(--accent-deep),
+    0 22px 38px -12px var(--accent),
+    0 4px 10px rgba(0, 0, 0, 0.35);
+}
+.btn:not(.btn-ghost):active {
+  transform: translateY(3px) scale(0.985);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 2px 10px color-mix(in srgb, var(--accent-deep) 70%, transparent), 0 1px 0 var(--accent-deep), 0 6px 14px -10px var(--accent);
+}
+.btn-ghost {
+  color: var(--ink);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)), var(--glass-fill);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 10px 24px -14px rgba(0, 0, 0, 0.8);
+  transition: transform 0.25s var(--glass-ease), box-shadow 0.25s var(--glass-ease);
+}
+.btn-ghost::before { opacity: 0.35; }
+.btn-ghost:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.4), inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, rgba(255, 255, 255, 0.14)), 0 16px 30px -14px rgba(0, 0, 0, 0.85), 0 0 30px -12px color-mix(in srgb, var(--accent) 50%, transparent); }
+.btn-ghost:active { transform: translateY(2px) scale(0.985); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.btn[disabled] { filter: grayscale(0.5) brightness(0.8); cursor: not-allowed; transform: none !important; }
+
+/* ---------- glass nav ---------- */
+.nav {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
+    color-mix(in srgb, var(--bg) 58%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  backdrop-filter: blur(22px) saturate(170%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4), 0 12px 30px -20px rgba(0, 0, 0, 0.9);
+}
+.nav-pages {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.01)), var(--glass-fill);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+.np.on {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 80%, #fff), var(--tone) 50%, color-mix(in srgb, var(--tone) 80%, #000));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -2px 5px rgba(0, 0, 0, 0.25), 0 6px 20px -6px var(--tone);
+}
+.foot-links a { background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent); }
+.foot-links a:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent), 0 0 20px -8px var(--accent); }
+
+/* ---------- modal & toasts: glass that rises toward you ---------- */
+.modal-bg { background: rgba(4, 4, 6, 0.45); -webkit-backdrop-filter: blur(10px) saturate(140%); backdrop-filter: blur(10px) saturate(140%); }
+.modal { animation: glassIn 0.55s var(--glass-ease) both !important; border-radius: 22px; }
+.toast { animation: glassToast 0.6s var(--glass-ease) both !important; }
+@keyframes glassIn { from { opacity: 0; transform: perspective(900px) translateY(24px) rotateX(14deg) scale(0.94); } }
+@keyframes glassToast { from { opacity: 0; transform: perspective(700px) translateX(30px) rotateY(-18deg) scale(0.96); } }
+
+/* ---------- transaction states (swap) ---------- */
+.swap-ok { position: relative; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08); background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent), color-mix(in srgb, var(--c-vault) 12%, var(--glass-fill)); }
+.swap-ok .tx-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--c-vault); box-shadow: 0 0 0 0 var(--c-vault); animation: txPulse 1.2s ease-out infinite; }
+.swap-ok.tx-confirmed, .swap-ok.tx-finalized { background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent), color-mix(in srgb, var(--c-trade) 16%, var(--glass-fill)); animation: txWin 0.8s var(--glass-ease); }
+.swap-ok.tx-confirmed .tx-dot, .swap-ok.tx-finalized .tx-dot { background: var(--c-trade); animation: txDone 0.7s var(--glass-ease) both; }
+.swap-ok.tx-confirmed::before, .swap-ok.tx-finalized::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  border: 2px solid var(--c-trade);
+  animation: txRing 0.9s var(--glass-ease) both;
+  pointer-events: none;
+}
+.swap-ok.tx-failed { background: color-mix(in srgb, var(--c-sell) 14%, var(--glass-fill)); }
+.swap-ok.tx-failed .tx-dot { background: var(--c-sell); animation: none; }
+@keyframes txPulse { 70% { box-shadow: 0 0 0 10px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@keyframes txDone { 0% { transform: scale(0.4); } 60% { transform: scale(1.5); } 100% { transform: scale(1); box-shadow: 0 0 14px var(--c-trade); } }
+@keyframes txRing { from { transform: scale(1); opacity: 1; } to { transform: scale(9); opacity: 0; } }
+@keyframes txWin { from { transform: scale(0.98); } 50% { transform: scale(1.01); } }
+
+/* loading shimmer for anything marked busy */
+.btn[aria-busy='true'], .swap-go:disabled { background-size: 200% 100%; }
+.skel { position: relative; overflow: hidden; border-radius: 8px; background: rgba(255, 255, 255, 0.05); }
+.skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent); animation: skel 1.4s infinite; }
+@keyframes skel { to { transform: translateX(100%); } }
+
+/* page change: the new page settles forward out of the glass */
+.page { animation: pageIn 0.6s var(--glass-ease) backwards; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(12px) scale(0.995); filter: blur(4px); } }
+
+/* ---------- small screens and fallbacks ---------- */
+@media (max-width: 860px) {
+  :root { --glass-blur: 12px; }
+  .floaters3d { display: none; }
+  .orb { width: 70vmax; height: 70vmax; opacity: 0.4; }
+}
+/* low-power devices: solid glass look without live blur or floating objects */
+.lite .card, .lite .lpanel, .lite .proofbar, .lite .burn-card, .lite .faq details, .lite .spec, .lite .buy-card, .lite .estimator, .lite .swap, .lite .flow-viz,
+.lite .st-step, .lite .hm-step, .lite .usage-item, .lite .key-item, .lite .stats-4 .stat, .lite .holdcheck, .lite .earners, .lite .btn-ghost, .lite .swapcard, .lite .pulse {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  --glass-fill: color-mix(in srgb, var(--card) 94%, transparent);
+}
+.lite .floaters3d, .lite .grain { display: none; }
+.lite .orb { animation: none; }
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass-fill: var(--card); --glass-fill-2: var(--card2, var(--card)); }
+  .nav { background: var(--bg); }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass-fill: color-mix(in srgb, var(--card) 95%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb, .g3d, .g3d-spin, .page, .swap-ok .tx-dot { animation: none !important; }
+  .floaters3d { display: none; }
+  .rv { opacity: 1 !important; transform: none !important; }
+  .btn::after { display: none; }
+  .btn:hover, .btn:active, .btn-ghost:hover { transform: none !important; }
+}

@@ -68,10 +68,10 @@ const BRANDS = {
     sub: 'Every trade of ${ticker} pays a creator fee. 80% is swapped into ${reward} and sent to every holder on a timer, 10% buys ${ticker} and burns it. Hold in any wallet. No staking, no KYC.',
     steps: [
       ['Someone trades ${ticker}', 'Every buy and sell, on any app, pays a small Pump.fun creator fee into the vault wallet.'],
-      ['The vault shields it', '80% becomes ${reward} for holders, 10% buys ${ticker} and burns it, 10% runs the project.'],
+      ['The vault splits it', '80% becomes ${reward} for holders, 10% buys ${ticker} and burns it, 10% runs the project.'],
       ['You get paid', 'Every few minutes the vault splits ${reward} across holders by balance and sends it.'],
     ],
-    closer: 'Shield your bag. Collect every five minutes.',
+    closer: 'Hold it. Get paid every five minutes.',
     faqExtra: [
       ['Is this real ZEC?', 'If the reward is set to a wrapped ZEC token on Solana (such as Zenrock’s zenZEC), you receive that token, which its issuer backs 1:1 with ZEC. Otherwise the vault pays in ${ticker} bought back from the market. The token section always shows exactly what is paid.'],
     ],

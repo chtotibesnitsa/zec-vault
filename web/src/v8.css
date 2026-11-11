@@ -1,0 +1,385 @@
+/* ==========================================================================
+   v8: new type, a living background on every page, real 3D objects inside
+   the information boxes, and a WebGL scene per page.
+   ========================================================================== */
+
+/* ---------- type: Satoshi for words, JetBrains Mono for numbers ---------- */
+@font-face { font-family: 'Satoshi'; src: url('./fonts/satoshi-400.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Satoshi'; src: url('./fonts/satoshi-500.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Satoshi'; src: url('./fonts/satoshi-700.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Satoshi'; src: url('./fonts/satoshi-900.woff2') format('woff2'); font-weight: 900; font-display: swap; }
+
+:root {
+  --display: 'Satoshi', system-ui, -apple-system, sans-serif;
+  --body: 'Satoshi', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --pixel: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+body { font-family: var(--body); font-weight: 400; letter-spacing: -0.003em; -webkit-font-smoothing: antialiased; }
+h1, h2, .h5-title, .s5-head h2, .swap5-copy h2, .phead h1, .closer-h { font-family: var(--display); font-weight: 900; letter-spacing: -0.035em; text-transform: none; }
+h3, .flow-steps h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.02em; }
+.btn { font-family: var(--display); font-weight: 700; letter-spacing: 0.01em; text-transform: none; font-size: 15px; }
+.btn-sm { font-size: 13.5px; }
+.np, .nav-links { font-family: var(--display); font-weight: 500; letter-spacing: -0.005em; }
+.wordmark { font-family: var(--display); font-weight: 900; letter-spacing: -0.02em; }
+.foot-wm { font-family: var(--display); font-weight: 900; letter-spacing: -0.04em; }
+.closer-h { text-transform: none; letter-spacing: -0.04em; }
+/* small labels: quiet mono caps instead of pixel type */
+.pixel, .statusbar, .h5-trust, .hero3d-hint, .win-tabs button, .tab, .chip-label, .chip-act, .chip-muted {
+  font-family: var(--pixel) !important;
+  font-weight: 500;
+  font-size: 10.5px !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.rank.pixel { font-size: 13px !important; font-weight: 700; }
+.mono, .pb-num, .burn-num, .stat-value { font-family: var(--mono); font-weight: 600; letter-spacing: -0.02em; }
+.h5-title b, .swap5-copy h2 em { font-style: normal; }
+
+/* ---------- background: a horizon floor, stars and a page-colored glow ---------- */
+.ambient { --page: var(--c-pay); }
+.ambient.pg-live { --page: var(--c-trade); }
+.ambient.pg-swap { --page: var(--c-sell); --page2: var(--c-trade); }
+.ambient.pg-how { --page: var(--c-vault); }
+.ambient.pg-boards { --page: var(--c-people); }
+.ambient.pg-app { --page: var(--c-pay); }
+.horizon {
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  bottom: 0;
+  height: 58vh;
+  perspective: 420px;
+  perspective-origin: 50% 0%;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 24%, #000);
+  mask-image: linear-gradient(to bottom, transparent, #000 24%, #000);
+  opacity: 0.55;
+}
+.horizon i {
+  position: absolute;
+  inset: 0 0 -60%;
+  transform: rotateX(68deg);
+  transform-origin: 50% 0;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--page) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--page) 40%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+  animation: floorRun 6s linear infinite;
+}
+@keyframes floorRun { to { background-position: 0 64px, 0 0; } }
+.horizon::before {
+  content: '';
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: -40px;
+  height: 120px;
+  background: radial-gradient(50% 50% at 50% 50%, color-mix(in srgb, var(--page) 45%, transparent), transparent 70%);
+  filter: blur(10px);
+}
+.stars, .stars::after {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, #fff8, transparent 60%), radial-gradient(1px 1px at 72% 12%, #fff6, transparent 60%),
+    radial-gradient(1.5px 1.5px at 33% 42%, #fff7, transparent 60%), radial-gradient(1px 1px at 88% 36%, #fff5, transparent 60%),
+    radial-gradient(1px 1px at 52% 8%, #fff6, transparent 60%), radial-gradient(1.5px 1.5px at 8% 64%, #fff5, transparent 60%),
+    radial-gradient(1px 1px at 64% 58%, #fff4, transparent 60%), radial-gradient(1px 1px at 92% 74%, #fff5, transparent 60%),
+    radial-gradient(1px 1px at 22% 86%, #fff3, transparent 60%), radial-gradient(1.5px 1.5px at 44% 24%, #fff6, transparent 60%);
+  background-size: 640px 640px;
+  animation: starDrift 120s linear infinite;
+}
+.stars::after { content: ''; background-size: 900px 900px; opacity: 0.6; animation-duration: 200s; animation-direction: reverse; }
+@keyframes starDrift { to { background-position: 640px 320px; } }
+.page-glow {
+  position: absolute;
+  left: 50%;
+  top: -30vh;
+  width: 110vw;
+  height: 80vh;
+  translate: -50% 0;
+  background: radial-gradient(50% 50% at 50% 50%, color-mix(in srgb, var(--page) 22%, transparent), transparent 70%);
+  transition: background 1.2s;
+}
+.vignette { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.55)); }
+
+/* ---------- 3D object stage ---------- */
+.o3 {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 118px;
+  height: 104px;
+  perspective: 520px;
+  perspective-origin: 50% 30%;
+  pointer-events: none;
+  transform-style: preserve-3d;
+}
+.o3-world {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(-16deg) rotateY(-26deg);
+  animation: o3idle 10s ease-in-out infinite alternate;
+}
+@keyframes o3idle { from { transform: rotateX(-16deg) rotateY(-34deg); } to { transform: rotateX(-12deg) rotateY(-14deg); } }
+.o3-world > * { position: absolute; left: 50%; top: 50%; transform-style: preserve-3d; }
+.o3-floor {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 2px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--tone) 40%, rgba(0, 0, 0, 0.7)), transparent);
+  filter: blur(4px);
+  opacity: 0.7;
+}
+.o-mini { width: 44px; height: 40px; perspective: 240px; vertical-align: middle; }
+.o-mini .o3-floor { height: 10px; bottom: 0; filter: blur(2px); }
+
+/* primitives */
+.bx, .cyl { position: absolute; left: 0; top: 0; transform-style: preserve-3d; translate: -50% -50%; }
+/* every wrapper inside a stage is positioned from the stage centre */
+.o3-world div { position: absolute; left: 0; top: 0; transform-style: preserve-3d; }
+.o3-world > div { left: 50%; top: 50%; }
+.bx-f, .cyl-cap, .cyl-side { position: absolute; left: 0; top: 0; }
+.bx-f { box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.14); }
+.bx-front { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.18); }
+.bx-glass { background: color-mix(in srgb, var(--fc) 30%, rgba(255, 255, 255, 0.08)); }
+.cyl-cap { inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.18), inset 0 -3px 6px rgba(0, 0, 0, 0.35); }
+.ball { position: absolute; left: 0; top: 0; translate: -50% -50%; border-radius: 50%; box-shadow: 0 0 14px color-mix(in srgb, var(--tone) 40%, transparent); }
+.zmark { width: 100%; height: 100%; fill: #6a4108; filter: drop-shadow(0 1px 0 rgba(255, 240, 200, 0.6)); }
+
+/* ---- swap cubes: SOL and $ZATS trade places ---- */
+.o-swapcubes .sc-orbit { animation: scOrbit 4.2s cubic-bezier(0.6, 0, 0.4, 1) infinite; }
+.o-swapcubes .sc-a, .o-swapcubes .sc-b { position: absolute; transform-style: preserve-3d; }
+.o-swapcubes .sc-a { transform: translateX(-26px); }
+.o-swapcubes .sc-b { transform: translateX(26px); }
+.o-swapcubes .sc-a .bx, .o-swapcubes .sc-b .bx { animation: scSpin 4.2s ease-in-out infinite; }
+.o-swapcubes .sc-ring { width: 92px; height: 92px; translate: -50% -50%; border-radius: 50%; border: 1.5px dashed color-mix(in srgb, var(--c-trade) 60%, transparent); transform: rotateX(78deg); }
+@keyframes scOrbit { 0%, 15% { transform: rotateY(0); } 50%, 65% { transform: rotateY(180deg); } 100% { transform: rotateY(360deg); } }
+@keyframes scSpin { 0%, 100% { transform: rotateX(0) rotateY(0); } 50% { transform: rotateX(90deg) rotateY(-180deg); } }
+
+/* ---- fee split: 80 / 10 / 10 bars rise from a plate ---- */
+.o-feesplit .fs-plate { transform: translateY(26px); }
+.o-feesplit .fs-bar { transform: translateX(var(--x)) translateY(calc(21px - var(--h) * 0.5px)); animation: fsRise 3.6s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; animation-delay: calc(var(--i) * 0.18s); transform-origin: 50% 100%; }
+@keyframes fsRise { 0% { transform: translateX(var(--x)) translateY(26px) scaleY(0.05); opacity: 0; } 30%, 85% { transform: translateX(var(--x)) translateY(calc(21px - var(--h) * 0.5px)) scaleY(1); opacity: 1; } 100% { transform: translateX(var(--x)) translateY(calc(21px - var(--h) * 0.5px)) scaleY(1); opacity: 0; } }
+
+/* ---- coin drop: payouts fall into a wallet ---- */
+.o-coindrop .cd-tray { transform: translateY(22px); }
+.o-coindrop .cd-coin { animation: cdFall 2.4s cubic-bezier(0.55, 0, 0.9, 0.45) infinite; animation-delay: calc(var(--i) * 0.8s); opacity: 0; }
+@keyframes cdFall {
+  0% { transform: translate3d(calc(var(--i) * 12px - 12px), -60px, 0) rotateX(80deg) rotateY(0); opacity: 0; }
+  12% { opacity: 1; }
+  70% { transform: translate3d(calc(var(--i) * 12px - 12px), 14px, 0) rotateX(80deg) rotateY(540deg); opacity: 1; }
+  100% { transform: translate3d(calc(var(--i) * 12px - 12px), 16px, 0) rotateX(90deg) rotateY(540deg); opacity: 0; }
+}
+
+/* ---- Z coin: spins on its edge, a light beam rises under it ---- */
+.o-zcoin .zc-spin { animation: zcSpin 5s linear infinite; }
+.o-zcoin .zc-face { position: absolute; width: 40px; height: 40px; left: -20px; top: -20px; }
+.zc-face.zc-f { transform: translateZ(5px); }
+.zc-face.zc-b { transform: rotateY(180deg) translateZ(5px); }
+.o-zcoin .zc-beam { width: 70px; height: 70px; translate: -50% -50%; transform: translateY(46px) rotateX(90deg); border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--c-trade) 70%, transparent), transparent); animation: beam 2.5s ease-in-out infinite; }
+@keyframes zcSpin { from { transform: translateY(-4px) rotateY(0); } 50% { transform: translateY(4px) rotateY(180deg); } to { transform: translateY(-4px) rotateY(360deg); } }
+@keyframes beam { 50% { opacity: 0.4; transform: translateY(46px) rotateX(90deg) scale(1.3); } }
+
+/* ---- hold safe: dial turns, timer ring fills (payout every few minutes) ---- */
+.o-safe .sf-turn { transform-style: preserve-3d; animation: sfTurn 8s ease-in-out infinite alternate; }
+.o-safe .sf-door { position: absolute; width: 60px; height: 52px; left: -30px; top: -26px; transform: translateZ(29px); border-radius: 6px; box-shadow: inset 0 0 0 2px #6b5f45, inset 0 0 0 5px #2a2519; transform-style: preserve-3d; }
+.o-safe .sf-dial { position: absolute; left: 30px; top: 26px; transform-style: preserve-3d; animation: sfDial 3s cubic-bezier(0.6, 0, 0.3, 1) infinite; }
+.o-safe .sf-dial .cyl { transform: translateZ(3px); }
+.o-safe .sf-handle { position: absolute; right: 7px; top: 18px; width: 4px; height: 16px; border-radius: 2px; background: #d9a53a; transform: translateZ(4px); }
+.o-safe .sf-timer { position: absolute; width: 104px; height: 104px; left: calc(50% - 52px); top: calc(50% - 52px); transform: translateZ(-40px); fill: none; stroke-width: 3; stroke: color-mix(in srgb, var(--c-pay) 25%, transparent); }
+.o-safe .sf-run { stroke: var(--c-pay); stroke-dasharray: 276; stroke-dashoffset: 276; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; animation: sfRun 5s linear infinite; filter: drop-shadow(0 0 4px var(--c-pay)); }
+@keyframes sfTurn { from { transform: rotateY(-14deg); } to { transform: rotateY(18deg); } }
+@keyframes sfDial { 0% { transform: rotateZ(0); } 40% { transform: rotateZ(200deg); } 70% { transform: rotateZ(120deg); } 100% { transform: rotateZ(360deg); } }
+@keyframes sfRun { to { stroke-dashoffset: 0; } }
+
+/* ---- name card: a profile card flips toward you, the signature writes itself ---- */
+.o-namecard .nc-flip { animation: ncFlip 6s ease-in-out infinite; transform-style: preserve-3d; }
+.o-namecard .nc-face { position: absolute; width: 92px; height: 58px; left: -46px; top: -29px; transform: translateZ(2.5px); display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; gap: 2px 7px; padding: 9px 10px; box-sizing: border-box; }
+.o-namecard .nc-av { grid-row: 1 / 3; width: 24px; height: 24px; border-radius: 50%; align-self: center; background: conic-gradient(from 30deg, var(--c-people), var(--c-vault), var(--c-pay), var(--c-people)); box-shadow: 0 0 10px var(--c-people); }
+.o-namecard .nc-face b { font: 700 13px/1 var(--display); color: #fff; align-self: end; }
+.o-namecard .nc-sig { width: 50px; height: 10px; fill: none; stroke: var(--c-people); stroke-width: 1.6; stroke-dasharray: 90; stroke-dashoffset: 90; animation: ncSig 3s ease-in-out infinite; }
+@keyframes ncFlip { 0%, 100% { transform: rotateY(-22deg) rotateX(8deg); } 50% { transform: rotateY(22deg) rotateX(-6deg) translateZ(10px); } }
+@keyframes ncSig { 0%, 15% { stroke-dashoffset: 90; } 60%, 100% { stroke-dashoffset: 0; } }
+
+/* ---- friends: three wallets orbit you, linked ---- */
+.o-friends .fr-ring { width: 90px; height: 90px; translate: -50% -50%; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--c-people) 45%, transparent); transform: rotateX(72deg); }
+.o-friends .fr-orbit { transform: rotateX(72deg); transform-style: preserve-3d; }
+.o-friends .fr-arm { position: absolute; transform-style: preserve-3d; transform: rotateZ(var(--a)); }
+.o-friends .fr-arm > .fr-link { position: absolute; left: 0; top: -0.5px; width: 45px; height: 1px; background: linear-gradient(90deg, transparent, var(--c-people)); }
+.o-friends .fr-bb { position: absolute; left: 45px; top: 0; transform-style: preserve-3d; transform: rotateZ(calc(-1 * var(--a))) rotateX(-72deg); }
+.o-friends .fr-orbit { animation: frOrbit 9s linear infinite; }
+.o-friends .fr-center .ball { animation: frPulse 2.4s ease-in-out infinite; }
+@keyframes frOrbit { from { transform: rotateX(72deg) rotateZ(0); } to { transform: rotateX(72deg) rotateZ(360deg); } }
+@keyframes frPulse { 50% { box-shadow: 0 0 26px var(--c-people); } }
+
+/* ---- mini: coin stack (paid) ---- */
+.o-stack .st-coin { transform: translateY(calc(12px - var(--i) * 4px)) rotateX(90deg); animation: stDrop 3s ease-in infinite; animation-delay: calc(var(--i) * 0.12s); }
+@keyframes stDrop { 0%, 8% { transform: translateY(calc(-18px - var(--i) * 4px)) rotateX(90deg); opacity: 0; } 30%, 90% { transform: translateY(calc(12px - var(--i) * 4px)) rotateX(90deg); opacity: 1; } 100% { opacity: 0; } }
+/* ---- mini: burn block melts into embers ---- */
+.o-burnblock .bb-melt { animation: bbMelt 3s ease-in infinite; }
+.o-burnblock .bb-ember { position: absolute; width: 4px; height: 4px; background: var(--c-burn); box-shadow: 0 0 6px var(--c-burn); animation: bbRise 3s ease-out infinite; animation-delay: calc(var(--i) * 0.3s + 1.2s); opacity: 0; }
+@keyframes bbMelt { 0%, 30% { transform: rotateY(0) scale(1); opacity: 1; } 80% { transform: rotateY(180deg) scale(0.15); opacity: 0.2; } 100% { transform: rotateY(180deg) scale(0); opacity: 0; } }
+@keyframes bbRise { 0% { transform: translate3d(calc((var(--i) - 1.5) * 6px), 0, 0); opacity: 1; } 100% { transform: translate3d(calc((var(--i) - 1.5) * 10px), -26px, 0); opacity: 0; } }
+/* ---- mini: holder grid ---- */
+.o-holders .hg-plane { transform: rotateX(60deg) translateY(4px); transform-style: preserve-3d; }
+.o-holders .hg-cell { transform: translate3d(var(--x), var(--y), 0); animation: hgPop 2.7s ease-in-out infinite; animation-delay: calc(var(--i) * 0.3s); }
+@keyframes hgPop { 0%, 100% { transform: translate3d(var(--x), var(--y), 0); } 30% { transform: translate3d(var(--x), var(--y), 10px); } }
+/* ---- mini: trade bars ---- */
+.o-bars .tb-plane { transform: translateY(14px); transform-style: preserve-3d; }
+.o-bars .tb-bar { transform: translateX(var(--x)); transform-origin: 50% 100%; animation: tbBeat 1.8s ease-in-out infinite; animation-delay: calc(var(--i) * 0.15s); }
+.o-bars .tb-bar .bx { translate: -50% -100%; }
+@keyframes tbBeat { 50% { transform: translateX(var(--x)) scaleY(0.6); } }
+/* ---- mini: fee prism (octahedron) ---- */
+.o-prism .pr-spin { animation: prSpin 6s linear infinite; transform-style: preserve-3d; }
+.o-prism .pr-f {
+  position: absolute;
+  width: 20px;
+  height: 17px;
+  left: -10px;
+  top: calc(var(--up) * -17px * 0.5 - 8.5px);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  transform-origin: 50% 100%;
+  background: color-mix(in srgb, var(--c-vault) calc(100% - var(--lit) * 18%), #000);
+  transform: rotateY(var(--k)) translateZ(10px) rotateX(35deg);
+}
+.o-prism .pr-f[style*='--up: -1'] { clip-path: polygon(0 0, 100% 0, 50% 100%); transform-origin: 50% 0; top: 0; transform: rotateY(var(--k)) translateZ(10px) rotateX(-35deg); }
+@keyframes prSpin { from { transform: rotateY(0) rotateX(-10deg); } to { transform: rotateY(360deg) rotateX(-10deg); } }
+
+/* ---- furnace: tokens go in, sparks come out ---- */
+.o-furnace { width: 170px; height: 150px; }
+.o-furnace .fu-body { transform: translateY(18px); }
+.o-furnace .fu-in { animation: fuIn 3s cubic-bezier(0.5, 0, 0.8, 0.4) infinite; animation-delay: calc(var(--i) * 1s); opacity: 0; }
+.o-furnace .fu-spark { position: absolute; width: 4px; height: 4px; border-radius: 1px; background: #ffd08a; box-shadow: 0 0 8px var(--c-burn); animation: fuSpark 1.8s ease-out infinite; animation-delay: calc(var(--i) * 0.3s); }
+@keyframes fuIn { 0% { transform: translate3d(-70px, -60px, 0) rotateX(0); opacity: 0; } 15% { opacity: 1; } 70% { transform: translate3d(0, 0, 33px) rotateX(360deg) scale(0.9); opacity: 1; } 85% { transform: translate3d(0, 10px, 33px) scale(0.2); opacity: 0; } 100% { opacity: 0; } }
+@keyframes fuSpark { 0% { transform: translate3d(0, -14px, 34px); opacity: 1; } 100% { transform: translate3d(calc((var(--i) - 2.5) * 14px), -70px, 40px); opacity: 0; } }
+
+/* ---- swap ticks ---- */
+.o-wallet .wk-turn { animation: wkTurn 4s ease-in-out infinite alternate; }
+.o-wallet .wk-flap { position: absolute; width: 14px; height: 10px; left: 4px; top: -5px; border-radius: 3px; background: #2fd18f; transform: translateZ(6px); box-shadow: 0 0 8px var(--c-trade); }
+@keyframes wkTurn { from { transform: rotateY(-30deg) rotateX(10deg); } to { transform: rotateY(30deg) rotateX(-6deg); } }
+.o-timer .tr-spin { animation: trSpin 5s linear infinite; }
+@keyframes trSpin { from { transform: rotateX(55deg) rotateZ(0); } to { transform: rotateX(55deg) rotateZ(360deg); } }
+.o-shield .sg-turn { animation: sgTurn 5s ease-in-out infinite; transform-style: preserve-3d; }
+.o-shield .sg-front, .o-shield .sg-back { position: absolute; width: 28px; height: 32px; left: -14px; top: -16px; clip-path: polygon(50% 0, 100% 16%, 100% 55%, 50% 100%, 0 55%, 0 16%); }
+.o-shield .sg-front { background: linear-gradient(160deg, #a7f0ff, var(--c-vault) 45%, #0f5a6b); transform: translateZ(3px); }
+.o-shield .sg-back { background: #0c3f4c; transform: translateZ(-3px); }
+@keyframes sgTurn { 0%, 100% { transform: rotateY(-35deg); } 50% { transform: rotateY(35deg); } }
+
+/* ---- token coin on the How page ---- */
+.o-token { width: 220px; height: 200px; perspective: 700px; }
+.o-token .tk-tilt { transform: rotateX(14deg); transform-style: preserve-3d; }
+.o-token .tk-spin { animation: tkSpin 9s linear infinite; transform-style: preserve-3d; }
+.o-token .zc-face { width: 54px; height: 54px; left: -27px; top: -27px; position: absolute; }
+.o-token .tk-f { transform: translateZ(6px); }
+.o-token .tk-b { transform: rotateY(180deg) translateZ(6px); }
+.o-token .tk-ring { position: absolute; width: 160px; height: 160px; left: -80px; top: -80px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--c-pay) 50%, transparent); transform: rotateX(78deg); }
+.o-token .tk-ring.r2 { width: 196px; height: 196px; left: -98px; top: -98px; border-style: dashed; animation: tkRing 20s linear infinite; }
+@keyframes tkSpin { to { transform: rotateY(360deg); } }
+@keyframes tkRing { from { transform: rotateX(78deg) rotateZ(0); } to { transform: rotateX(78deg) rotateZ(360deg); } }
+
+/* ---- boards minis ---- */
+.o-podium .pd-plane { transform: translateY(14px); transform-style: preserve-3d; }
+.o-podium .pd-step { transform: translateX(var(--x)); }
+.o-podium .pd-step .bx { translate: -50% -100%; }
+.o-fountain .cf-base { transform: translateY(12px) rotateX(90deg); }
+.o-fountain .cf-coin { animation: cfUp 2.4s ease-out infinite; animation-delay: calc(var(--i) * 0.8s); opacity: 0; }
+@keyframes cfUp { 0% { transform: translate3d(0, 10px, 0) rotateY(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate3d(calc((var(--i) - 1) * 12px), -22px, 0) rotateY(360deg); opacity: 0; } }
+.o-candles .cn-plane { transform: translateY(12px); transform-style: preserve-3d; }
+.o-candles .cn-c { transform: translate(var(--x), calc(-1 * var(--y))); animation: cnBob 2.4s ease-in-out infinite; animation-delay: calc(var(--i) * 0.3s); }
+.o-candles .cn-c .bx { translate: -50% -100%; }
+.o-candles .cn-wick { position: absolute; left: -0.5px; bottom: -4px; width: 1px; height: calc(100% + 8px); min-height: 30px; top: -30px; background: currentColor; color: rgba(255, 255, 255, 0.4); }
+@keyframes cnBob { 50% { transform: translate(var(--x), calc(-1 * var(--y) - 4px)); } }
+.o-globe .ball { animation: gbSpin 6s linear infinite; }
+.o-globe .hgb-ring { width: 40px; height: 40px; translate: -50% -50%; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--c-people) 50%, transparent); transform: rotateX(72deg); animation: gbRing 6s linear infinite; }
+.o-globe .hgb-ring i { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: var(--c-pay); box-shadow: 0 0 6px var(--c-pay); transform: rotate(var(--a)) translateX(20px); }
+@keyframes gbRing { from { transform: rotateX(72deg) rotateZ(0); } to { transform: rotateX(72deg) rotateZ(360deg); } }
+@keyframes gbSpin { 50% { filter: brightness(1.25); } }
+.o-at .at-turn { animation: atTurn 5s ease-in-out infinite alternate; transform-style: preserve-3d; }
+.o-at .at-sign { position: absolute; left: -10px; top: -14px; width: 20px; text-align: center; font: 900 20px/28px var(--display); color: #fff; transform: translateZ(6px); text-shadow: 0 0 10px var(--c-people); }
+@keyframes atTurn { from { transform: rotateY(-35deg); } to { transform: rotateY(35deg); } }
+.o-chain .ch-turn { animation: chTurn 6s linear infinite; transform-style: preserve-3d; }
+.o-chain .ch-link { position: absolute; width: 20px; height: 11px; left: calc(var(--i) * 13px - 23px); top: -5.5px; border-radius: 6px; border: 2.5px solid var(--c-people); box-shadow: 0 0 6px color-mix(in srgb, var(--c-people) 60%, transparent); transform: rotateX(calc(var(--i) * 90deg)); }
+@keyframes chTurn { from { transform: rotateY(0) rotateZ(-15deg); } to { transform: rotateY(360deg) rotateZ(-15deg); } }
+.o-xbadge .xb-flip { animation: xbFlip 4s ease-in-out infinite; transform-style: preserve-3d; }
+.o-xbadge .xb-x { position: absolute; left: -8px; top: -9px; width: 16px; text-align: center; font: 900 15px/18px var(--display); color: #fff; transform: translateZ(2.5px); }
+@keyframes xbFlip { 0%, 40% { transform: rotateY(0); } 60%, 100% { transform: rotateY(360deg); } }
+
+/* ---------- placing objects in the boxes ---------- */
+.hm-top .o3, .st-step .o3 { width: 150px; height: 122px; margin: -14px -10px -6px -16px; }
+.hm-top .o3 .o3-world, .st-step .o3 .o3-world { scale: 1.3; }
+.pb-item .o-mini .o3-world { scale: 1.05; }
+.st-step .st-ic, .hm-step .hm-ic { display: none; }
+.st-step { padding-top: 10px; }
+.pb-item .o-mini { position: absolute; right: 8px; top: 6px; width: 58px; height: 52px; margin: 0; }
+.pb-label .pb-ic { display: none; }
+.usage-item .o-mini { width: 66px; height: 58px; margin: -8px 0 0 -8px; }
+.usage-item .o-mini .o3-world { scale: 1.25; }
+.o3-world > .ball { left: 50%; top: 50%; }
+.usage-item .ui-ic { display: none; }
+.ticks li { display: flex; align-items: center; gap: 8px; padding-top: 4px; padding-bottom: 4px; }
+.ticks li .o-mini { width: 40px; height: 34px; margin: -8px 2px -8px -4px; }
+.ticks li .o-mini .o3-world { scale: 0.72; }
+.burn-card { grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1fr); align-items: center; }
+.burn-card .o-furnace { align-self: center; }
+.spec-wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; }
+.spec-wrap .o-token { margin-right: 10px; }
+.lp-head .o-mini { margin: -10px -6px -10px -8px; }
+
+/* ---------- page scenes ---------- */
+.scene-band {
+  position: relative;
+  max-width: var(--max);
+  margin: 26px auto 0;
+  padding: 0 var(--pad);
+}
+.scene-frame {
+  position: relative;
+  height: clamp(280px, 38vw, 420px);
+  border-radius: 28px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(60% 80% at 50% 100%, color-mix(in srgb, var(--tone) 18%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.005)),
+    color-mix(in srgb, var(--card) 45%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 40px 80px -40px rgba(0, 0, 0, 0.9), 0 0 80px -40px var(--tone);
+}
+.scene3d { position: absolute; inset: 0; }
+.scene3d canvas { display: block; width: 100% !important; height: 100% !important; }
+.scene-copy { position: absolute; left: 28px; top: 24px; z-index: 2; display: grid; gap: 6px; max-width: min(440px, 60%); pointer-events: none; }
+.scene-copy h1 { margin: 0; font-size: clamp(30px, 4.4vw, 54px); line-height: 0.98; }
+.scene-copy p { margin: 0; color: var(--muted); font-size: 16px; }
+.scene-legend { position: absolute; right: 22px; bottom: 18px; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 70%; }
+.scene-legend span { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; font: 500 12.5px/1 var(--body); color: var(--ink); background: rgba(10, 10, 12, 0.55); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.scene-legend i { width: 9px; height: 9px; border-radius: 3px; background: var(--c, var(--tone)); box-shadow: 0 0 8px var(--c, var(--tone)); }
+.flow-viz .scene3d { position: relative; inset: auto; width: 100%; aspect-ratio: 1 / 0.86; }
+.flow-viz.has-3d .flow-ring { display: none; }
+.flow-viz.has-3d .flow-center { position: absolute !important; inset: 22px 0 auto 0 !important; width: auto !important; height: auto !important; transform: none !important; display: grid; justify-items: center; text-align: center; pointer-events: none; z-index: 2; }
+.flow-viz.has-3d { position: sticky; }
+
+/* the live board lists get a little more depth */
+.lrow, .hl-row { transition: transform 0.25s var(--glass-ease), background 0.25s; }
+.lrow:hover, .hl-row:hover { transform: translateX(4px); }
+
+@media (max-width: 860px) {
+  .scene-copy { left: 18px; top: 16px; max-width: 80%; }
+  .scene-legend { left: 12px; right: 12px; bottom: 12px; justify-content: center; max-width: none; }
+  .scene-frame { height: 360px; }
+  .burn-card { grid-template-columns: 1fr; justify-items: start; }
+  .spec-wrap { grid-template-columns: 1fr; }
+  .spec-wrap .o-token { justify-self: center; order: -1; }
+  .horizon { height: 40vh; }
+}
+.lite .horizon i, .lite .stars, .lite .stars::after { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .o3-world, .o3-world *, .horizon i, .stars, .stars::after { animation: none !important; }
+  .o-coindrop .cd-coin, .o-furnace .fu-in, .o-fountain .cf-coin { opacity: 1; }
+}
+
+.scene-copy h1, .scene-copy p { text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85); }

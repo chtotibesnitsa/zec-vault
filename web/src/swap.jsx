@@ -2,7 +2,7 @@
 // own wallet signs and sends. We add no fee and never touch the funds.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { brand } from './brand.js';
-import { fmtNum, solscanTx } from './api.js';
+import { fmtNum, solscanTx, watchTx } from './api.js';
 import { shareOnX, useAuth } from './auth.jsx';
 import { Px } from './pixel.jsx';
 
@@ -107,7 +107,8 @@ export function SwapCard({ cfg, compact = false }) {
       const j = await r.json();
       if (!r.ok || !j.swapTransaction) throw new Error(j.error || 'Could not build the swap');
       const sig = await conn.signAndSend(b64ToBytes(j.swapTransaction));
-      setState({ busy: false, err: '', sig });
+      setState({ busy: false, err: '', sig, conf: 'pending' });
+      watchTx(sig, (conf) => setState((s) => (s.sig === sig ? { ...s, conf } : s)));
     } catch (e) {
       setState({ busy: false, err: /reject|denied|cancel/i.test(e.message) ? 'Cancelled in your wallet.' : e.message, sig: '' });
     }
@@ -178,8 +179,9 @@ export function SwapCard({ cfg, compact = false }) {
         </div>
       )}
       {state.sig && (
-        <div className="swap-ok">
-          <span>Swap sent.</span>
+        <div className={`swap-ok tx-${state.conf || 'pending'}`} role="status">
+          <span className="tx-dot" aria-hidden="true" />
+          <span>{state.conf === 'failed' ? 'Swap failed on-chain. No tokens moved.' : state.conf === 'confirmed' || state.conf === 'finalized' ? 'Swap confirmed.' : 'Swap sent. Confirming…'}</span>
           <a href={solscanTx(state.sig)} target="_blank" rel="noreferrer">
             view on solscan ↗
           </a>

@@ -124,3 +124,20 @@ export function ago(ts) {
   if (s < 86400) return Math.floor(s / 3600) + 'h ago';
   return Math.floor(s / 86400) + 'd ago';
 }
+
+// Polls the vault API for a transaction's status until it settles (about a
+// minute at most). onChange gets 'pending' | 'confirmed' | 'finalized' | 'failed'.
+export function watchTx(sig, onChange) {
+  if (!brand.apiUrl) return;
+  let n = 0;
+  const run = async () => {
+    try {
+      const r = await api('/api/tx/' + sig);
+      if (r.status && r.status !== 'pending' && r.status !== 'unknown') return onChange(r.status);
+    } catch {
+      /* keep trying */
+    }
+    if (++n < 30) setTimeout(run, 2000);
+  };
+  setTimeout(run, 1500);
+}

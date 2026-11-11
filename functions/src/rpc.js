@@ -69,8 +69,19 @@ export class Rpc {
     ]);
   }
 
-  // Polls until the signature is confirmed, fails, or times out.
-  async confirm(sig, timeoutMs = 50000) {
+  getBlockHeight() {
+    return this.call('getBlockHeight', [{ commitment: 'confirmed' }]);
+  }
+
+  // Status of an older signature too (searches history). null = unknown.
+  async signatureStatus(sig) {
+    const r = await this.call('getSignatureStatuses', [[sig], { searchTransactionHistory: true }]);
+    return r.value[0] || null;
+  }
+
+  // Polls until the signature is confirmed, fails, or times out. Every poll is
+  // a Cloudflare subrequest, so it polls every 2 s rather than faster.
+  async confirm(sig, timeoutMs = 40000) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const r = await this.call('getSignatureStatuses', [[sig], { searchTransactionHistory: false }]);
@@ -79,7 +90,7 @@ export class Rpc {
         if (st.err) return { ok: false, err: st.err };
         if (st.confirmationStatus === 'confirmed' || st.confirmationStatus === 'finalized') return { ok: true };
       }
-      await sleep(1500);
+      await sleep(2000);
     }
     return { ok: false, err: 'timeout' };
   }

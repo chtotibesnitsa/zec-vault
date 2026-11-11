@@ -8,14 +8,15 @@ import { Identity, IDENTITY_SCHEMA } from './identity.js';
 import { Rpc, TOKEN_PROGRAM, sleep } from './rpc.js';
 import { allocate, buildSnapshot, chunk, fromRaw, parseTrade, selectPayouts, solDelta, toRaw, tokenDelta } from './engine.js';
 import {
-  burnTokens,
-  buyOwnToken,
-  collectCreatorFees,
+  buildBurnTx,
+  buildBuyTx,
+  buildClaimTx,
+  buildJupiterTx,
+  buildPayoutTx,
   isOnCurveAddress,
   isValidAddress,
   loadKeypair,
-  sendPayoutBatch,
-  swapViaJupiter,
+  sendSigned,
   toBase58,
 } from './solana.js';
 
@@ -47,6 +48,19 @@ function cfg(env) {
   };
 }
 
+// scan: record trades. claim: settle pending, claim fees, buy for holders.
+// burn: buy and burn. pay: snapshot holders and pay them.
+const STAGES = ['scan', 'claim', 'burn', 'pay'];
+
+// Constant-time string compare for the admin key.
+function sameKey(a, b) {
+  const x = new TextEncoder().encode(String(a));
+  const y = new TextEncoder().encode(String(b));
+  let d = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) d |= (x[i] || 0) ^ (y[i] || 0);
+  return d === 0;
+}
+
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET,POST,OPTIONS',
@@ -69,9 +83,15 @@ export default {
     const stub = env.VAULT.get(env.VAULT.idFromName('main'));
     return stub.fetch(req);
   },
+  // Each stage is its own request to the Durable Object, so each gets its own
+  // Cloudflare subrequest budget (50 on the free plan). Stages run in order.
   async scheduled(_event, env, ctx) {
     const stub = env.VAULT.get(env.VAULT.idFromName('main'));
-    ctx.waitUntil(stub.fetch('https://vault/internal/tick', { method: 'POST' }));
+    ctx.waitUntil(
+      (async () => {
+        for (const stage of STAGES) await stub.fetch(`https://vault/internal/tick?stage=${stage}`, { method: 'POST' });
+      })(),
+    );
   },
 };
 
@@ -131,7 +151,8 @@ export class Vault {
     const p = url.pathname;
     try {
       if (p === '/internal/tick') {
-        await this.tick();
+        if (req.headers.get('cf-connecting-ip')) return json({ error: 'not found' }, 404); // never from the internet
+        await this.tick(url.searchParams.get('stage') || 'all');
         return json({ ok: true });
       }
       if (p === '/api/config') return json(this.publicConfig());
@@ -141,6 +162,7 @@ export class Vault {
       if (p.startsWith('/api/holder/')) return json(this.holder(decodeURIComponent(p.slice('/api/holder/'.length))));
       if (p.startsWith('/api/admin/')) return this.admin(req, p);
       if (p === '/api/diamonds') return json(this.diamonds());
+      if (p.startsWith('/api/tx/')) return json(await this.txStatus(decodeURIComponent(p.slice('/api/tx/'.length))));
       if (p === '/api/jup/quote' || p === '/api/jup/swap') return this.jupProxy(req, p, url);
       if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/profile' || p === '/api/referrals' || p.startsWith('/api/u/')) {
         return this.id.route(req, p, url, json);
@@ -161,6 +183,16 @@ export class Vault {
     const init = p.endsWith('quote') ? { headers } : { method: 'POST', headers, body: await req.text() };
     const r = await fetch(target, init);
     return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', ...CORS } });
+  }
+
+  // Confirmation status of any Solana transaction, for the swap screen.
+  async txStatus(sig) {
+    if (!/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(sig)) return { error: 'invalid signature' };
+    if (!this.env.SOLANA_RPC_URL) return { status: 'unknown' };
+    const st = await new Rpc(this.env.SOLANA_RPC_URL).signatureStatus(sig);
+    if (!st) return { status: 'pending' };
+    if (st.err) return { status: 'failed', err: st.err };
+    return { status: st.confirmationStatus === 'processed' ? 'pending' : st.confirmationStatus };
   }
 
   publicConfig() {
@@ -195,7 +227,8 @@ export class Vault {
   }
 
   // ---------- scheduled work ----------
-  async tick() {
+  // stage: 'scan' | 'claim' | 'burn' | 'pay' | 'all'
+  async tick(stage = 'all') {
     if (this.running) return;
     this.running = true;
     try {
@@ -203,22 +236,44 @@ export class Vault {
       if (!c.mint || !this.env.SOLANA_RPC_URL) return;
       const rpc = this.makeRpc ? this.makeRpc() : new Rpc(this.env.SOLANA_RPC_URL);
       await this.ensureMintInfo(rpc, c);
-      try {
-        await this.scanTrades(rpc, c);
-      } catch (e) {
-        this.set('last_feed_error', `${new Date().toISOString()} ${e.message}`);
+      if (stage === 'scan' || stage === 'all') {
+        try {
+          await this.scanTrades(rpc, c);
+          this.set('last_feed_error', '');
+        } catch (e) {
+          this.set('last_feed_error', `${new Date().toISOString()} ${e.message}`);
+        }
       }
-      const now = Date.now();
-      const lastCycle = Number(this.get('last_cycle_at', '0'));
-      if (this.get('paused') === '1' || !this.signer()) return;
-      if (now - lastCycle < c.cycleMinutes * 60000 - 5000) return;
-      this.set('last_cycle_at', now);
-      try {
-        await this.cycle(rpc, c);
+      if (stage === 'scan' || this.get('paused') === '1' || !this.signer()) return;
+
+      // A cycle opens in the claim stage when it is due; burn and pay follow it.
+      if (stage === 'claim' || stage === 'all') {
+        const lastCycle = Number(this.get('last_cycle_at', '0'));
+        if (Date.now() - lastCycle < c.cycleMinutes * 60000 - 5000) return;
+        this.set('last_cycle_at', Date.now());
+        this.set('cycle_open', '1');
         this.set('last_error', '');
-      } catch (e) {
-        this.set('last_error', `${new Date().toISOString()} ${e.message}`);
       }
+      if (this.get('cycle_open') !== '1') return;
+      const steps = stage === 'all' ? ['claim', 'burn', 'pay'] : [stage];
+      for (const st of steps) {
+        try {
+          const go = await this.cycleStage(rpc, c, st);
+          if (!go) {
+            this.set('cycle_open', '0');
+            return;
+          }
+        } catch (e) {
+          this.set('last_error', `${new Date().toISOString()} ${st}: ${e.message}`);
+          // With a transaction in flight nothing else may move money this cycle.
+          // Otherwise a failed buy must not block paying what holders are owed.
+          if (this.get('pending')) {
+            this.set('cycle_open', '0');
+            return;
+          }
+        }
+      }
+      if (stage === 'pay' || stage === 'all') this.set('cycle_open', '0');
     } finally {
       this.running = false;
     }
@@ -242,100 +297,208 @@ export class Vault {
     }
   }
 
-  // Records real buys and sells of the token, newest signatures first.
+  // Records real buys and sells of the token. Pages back to the last seen
+  // signature so a busy minute is not skipped (up to 3 pages per run).
   async scanTrades(rpc, c) {
     const until = this.get('last_feed_sig') || undefined;
-    const sigs = await rpc.getSignaturesForAddress(c.mint, { limit: 40, ...(until ? { until } : {}) });
+    let sigs = [];
+    if (!until) {
+      sigs = await rpc.getSignaturesForAddress(c.mint, { limit: 25 });
+    } else {
+      let before;
+      for (let page = 0; page < 3; page++) {
+        const batch = await rpc.getSignaturesForAddress(c.mint, { limit: 100, until, ...(before ? { before } : {}) });
+        sigs.push(...batch);
+        if (batch.length < 100) break;
+        before = batch[batch.length - 1].signature;
+      }
+    }
     if (!sigs.length) return;
     const ignore = new Set();
     const s = this.signer();
     if (s) ignore.add(s.publicKey.toBase58());
+    // Oldest first, and at most 30 transaction reads per run (subrequest budget).
+    // If more are waiting, the rest are read on the next run.
     const fresh = sigs.filter((x) => !x.err).reverse();
-    for (const group of chunk(fresh, 4)) {
+    const take = fresh.slice(0, 30);
+    for (const group of chunk(take, 5)) {
       const txs = await Promise.all(group.map((x) => rpc.getTransaction(x.signature).catch(() => null)));
       for (const tx of txs) {
         const ev = parseTrade(tx, c.mint, { ignore });
         if (ev) this.event(ev);
       }
     }
-    this.set('last_feed_sig', sigs[0].signature);
+    const lastTaken = take.length < fresh.length ? take[take.length - 1].signature : sigs[0].signature;
+    this.set('last_feed_sig', lastTaken);
   }
 
-  async cycle(rpc, c) {
-    const signer = this.signer();
-    const me = signer.publicKey.toBase58();
-    const now = Date.now();
-
-    // 1. Claim creator fees on a slower timer (each claim costs a network fee).
-    if (now - Number(this.get('last_claim_at', '0')) >= c.claimEveryMinutes * 60000 - 5000) {
-      this.set('last_claim_at', now);
-      try {
-        const sig = await collectCreatorFees(rpc, signer, { priorityFee: c.priorityFee });
-        const tx = await this.txWithRetry(rpc, sig);
-        const gained = tx ? solDelta(tx, me, { addBackFee: true }) : 0n;
-        if (gained > 0n) {
-          const toHolders = (gained * BigInt(c.shareBps)) / 10000n;
-          const burnBps = Math.min(c.burnBps, 10000 - c.shareBps);
-          const toBurn = (gained * BigInt(burnBps)) / 10000n;
-          this.addBig('fees_total_lamports', gained);
-          this.addBig('holders_budget_lamports', toHolders);
-          this.addBig('burn_budget_lamports', toBurn);
-          this.addBig('ops_lamports', gained - toHolders - toBurn);
-          this.event({ kind: 'claim', sig, wallet: me, lamports: gained, meta: { toHolders: toHolders.toString(), toBurn: toBurn.toString() } });
-        }
-      } catch (e) {
-        // "nothing to claim" shows up as a failed simulation; that is normal.
-        this.set('last_claim_error', `${new Date().toISOString()} ${e.message}`);
-      }
+  // ---------- money transactions: record, send, settle exactly once ----------
+  // Before sending, the signed transaction's signature is stored as pending.
+  // It is applied to the ledger only when it is confirmed on-chain, whenever
+  // that is. A transaction that timed out stays pending and blocks new money
+  // moves until it is confirmed, fails, or its blockhash expires.
+  async submit(rpc, kind, data, built) {
+    this.set('pending', JSON.stringify({ kind, sig: built.sig, lastValid: built.lastValid, data, at: Date.now() }));
+    const r = await sendSigned(rpc, built);
+    if (r.state === 'failed') {
+      this.set('pending', '');
+      throw new Error(`${kind} tx ${built.sig} failed: ${JSON.stringify(r.err)}`);
     }
+    if (r.state === 'pending') throw new Error(`${kind} tx ${built.sig} not confirmed yet, it will be settled next run`);
+    const tx = await this.txWithRetry(rpc, built.sig);
+    if (!tx) throw new Error(`${kind} tx ${built.sig} confirmed but not readable yet, it will be settled next run`);
+    this.settle(kind, built.sig, tx, data);
+    this.set('pending', '');
+    return tx;
+  }
 
-    // 2. Spend the holders' budget on the reward token.
-    const balance = BigInt(await rpc.getBalance(me));
-    const reserve = BigInt(Math.round(c.gasReserveSol * LAMPORTS));
-    const budget = this.big('holders_budget_lamports');
-    const spendable = balance > reserve ? balance - reserve : 0n;
-    const spend = budget < spendable ? budget : spendable;
-    const rewardMint = c.rewardMint || c.mint;
-    if (spend >= BigInt(Math.round(c.minCycleSol * LAMPORTS))) {
-      const sol = Number(spend) / LAMPORTS;
-      const sig = c.rewardMint
-        ? await swapViaJupiter(rpc, signer, { outputMint: c.rewardMint, lamports: spend, slippageBps: Math.round(c.slippage * 100), apiBase: c.jupBase, apiKey: c.jupKey })
-        : await buyOwnToken(rpc, signer, { mint: c.mint, sol, slippage: c.slippage, priorityFee: c.priorityFee });
-      const tx = await this.txWithRetry(rpc, sig);
-      const got = tx ? tokenDelta(tx, me, rewardMint) : 0n;
-      const spent = tx ? -solDelta(tx, me) : spend;
-      this.addBig('holders_budget_lamports', -spend);
+  // true = nothing pending any more. false = still waiting on the network.
+  async resolvePending(rpc) {
+    const raw = this.get('pending');
+    if (!raw) return true;
+    const p = JSON.parse(raw);
+    const st = await rpc.signatureStatus(p.sig);
+    if (st && !st.err && (st.confirmationStatus === 'confirmed' || st.confirmationStatus === 'finalized')) {
+      const tx = await this.txWithRetry(rpc, p.sig);
+      if (!tx) return false;
+      this.settle(p.kind, p.sig, tx, p.data);
+      this.set('pending', '');
+      return true;
+    }
+    if (st && st.err) {
+      this.set('pending', '');
+      this.set('last_dropped', `${p.kind} ${p.sig} failed on-chain`);
+      return true;
+    }
+    if ((await rpc.getBlockHeight()) > p.lastValid) {
+      this.set('pending', '');
+      this.set('last_dropped', `${p.kind} ${p.sig} expired without landing`);
+      return true;
+    }
+    return false;
+  }
+
+  // Applies one confirmed transaction to the ledger. Amounts come from the
+  // transaction itself, never from what was asked for.
+  settle(kind, sig, tx, data) {
+    const me = this.signer().publicKey.toBase58();
+    const c = cfg(this.env);
+    if (kind === 'claim') {
+      const gained = solDelta(tx, me, { addBackFee: true });
+      if (gained <= 0n) return;
+      const toHolders = (gained * BigInt(c.shareBps)) / 10000n;
+      const toBurn = (gained * BigInt(Math.min(c.burnBps, 10000 - c.shareBps))) / 10000n;
+      this.addBig('fees_total_lamports', gained);
+      this.addBig('holders_budget_lamports', toHolders);
+      this.addBig('burn_budget_lamports', toBurn);
+      this.addBig('ops_lamports', gained - toHolders - toBurn);
+      this.event({ kind: 'claim', sig, wallet: me, lamports: gained, meta: { toHolders: toHolders.toString(), toBurn: toBurn.toString() } });
+    } else if (kind === 'buyback') {
+      const got = tokenDelta(tx, me, data.mint);
+      const spent = -solDelta(tx, me);
+      this.addBig('holders_budget_lamports', -BigInt(data.spend));
       this.addBig('sol_spent_lamports', spent);
       if (got > 0n) {
         this.addBig('reward_pool_raw', got);
         this.addBig('rewards_bought_raw', got);
       }
       this.event({ kind: 'buyback', sig, wallet: me, amountRaw: got, lamports: spent });
+    } else if (kind === 'burnbuy') {
+      const got = tokenDelta(tx, me, data.mint);
+      this.addBig('burn_budget_lamports', -BigInt(data.spend));
+      this.addBig('burn_owed_lamports', BigInt(data.spend));
+      if (got > 0n) this.addBig('burn_owed_raw', got);
+      this.set('burn_buy_sig', sig);
+    } else if (kind === 'burn') {
+      const amount = BigInt(data.amount);
+      this.addBig('burn_owed_raw', -amount);
+      this.addBig('burned_raw', amount);
+      this.addBig('burn_sol_lamports', BigInt(data.lamports));
+      this.addBig('burn_owed_lamports', -BigInt(data.lamports));
+      this.event({ kind: 'burn', sig, wallet: me, amountRaw: amount, lamports: BigInt(data.lamports), meta: { buySig: data.buySig || null } });
+    } else if (kind === 'payout') {
+      const ts = Date.now();
+      for (const it of data.items) {
+        const amount = BigInt(it.amount);
+        const row = this.sql.exec('SELECT raw, paid_raw FROM owed WHERE wallet = ?', it.wallet).toArray()[0];
+        const left = BigInt(row ? row.raw : '0') - amount;
+        const paid = BigInt(row ? row.paid_raw : '0') + amount;
+        this.sql.exec(
+          `INSERT INTO owed (wallet, raw, paid_raw, payouts, last_paid) VALUES (?, ?, ?, 1, ?)
+           ON CONFLICT(wallet) DO UPDATE SET raw = excluded.raw, paid_raw = excluded.paid_raw, payouts = payouts + 1, last_paid = excluded.last_paid`,
+          it.wallet,
+          (left > 0n ? left : 0n).toString(),
+          paid.toString(),
+          ts,
+        );
+        this.addBig('rewards_paid_raw', amount);
+        this.event({ kind: 'payout', sig, wallet: it.wallet, amountRaw: amount, ts });
+      }
+    }
+  }
+
+  // Returns false when the cycle should stop (something is still pending).
+  async cycleStage(rpc, c, stage) {
+    if (!(await this.resolvePending(rpc))) throw new Error('waiting for an earlier transaction to confirm or expire');
+    const signer = this.signer();
+    const me = signer.publicKey.toBase58();
+    const reserve = BigInt(Math.round(c.gasReserveSol * LAMPORTS));
+    const minSpend = BigInt(Math.round(c.minCycleSol * LAMPORTS));
+    const rewardMint = c.rewardMint || c.mint;
+
+    if (stage === 'claim') {
+      // 1. Claim creator fees on a slower timer (each claim costs a network fee).
+      if (Date.now() - Number(this.get('last_claim_at', '0')) >= c.claimEveryMinutes * 60000 - 5000) {
+        this.set('last_claim_at', Date.now());
+        try {
+          await this.submit(rpc, 'claim', {}, await buildClaimTx(rpc, signer, { priorityFee: c.priorityFee }));
+          this.set('last_claim_error', '');
+        } catch (e) {
+          // "nothing to claim" shows up as a failed simulation; that is normal.
+          this.set('last_claim_error', `${new Date().toISOString()} ${e.message}`);
+          if (this.get('pending')) return false;
+        }
+      }
+      // 2. Spend the holders' budget on the reward token.
+      const balance = BigInt(await rpc.getBalance(me));
+      const budget = this.big('holders_budget_lamports');
+      const spendable = balance > reserve ? balance - reserve : 0n;
+      const spend = budget < spendable ? budget : spendable;
+      if (spend >= minSpend) {
+        const built = c.rewardMint
+          ? await buildJupiterTx(rpc, signer, { outputMint: c.rewardMint, lamports: spend, slippageBps: Math.round(c.slippage * 100), apiBase: c.jupBase, apiKey: c.jupKey })
+          : await buildBuyTx(rpc, signer, { mint: c.mint, sol: Number(spend) / LAMPORTS, slippage: c.slippage, priorityFee: c.priorityFee });
+        await this.submit(rpc, 'buyback', { spend: spend.toString(), mint: rewardMint }, built);
+      }
+      return true;
     }
 
-    // 2b. Buy back the vault token with the burn budget and burn exactly what was bought.
-    const burnBudget = this.big('burn_budget_lamports');
-    const afterBuy = BigInt(await rpc.getBalance(me));
-    const burnSpend = burnBudget < afterBuy - reserve ? burnBudget : afterBuy > reserve ? afterBuy - reserve : 0n;
-    if (burnSpend >= BigInt(Math.round(c.minCycleSol * LAMPORTS))) {
-      const buySig = await buyOwnToken(rpc, signer, { mint: c.mint, sol: Number(burnSpend) / LAMPORTS, slippage: c.slippage, priorityFee: c.priorityFee });
-      const tx = await this.txWithRetry(rpc, buySig);
-      const bought = tx ? tokenDelta(tx, me, c.mint) : 0n;
-      this.addBig('burn_budget_lamports', -burnSpend);
-      if (bought > 0n) {
-        const sig = await burnTokens(rpc, signer, {
+    if (stage === 'burn') {
+      // 2b. Buy the vault token with the burn budget.
+      const burnBudget = this.big('burn_budget_lamports');
+      const bal = BigInt(await rpc.getBalance(me));
+      const avail = bal > reserve ? bal - reserve : 0n;
+      const burnSpend = burnBudget < avail ? burnBudget : avail;
+      if (burnSpend >= minSpend) {
+        const built = await buildBuyTx(rpc, signer, { mint: c.mint, sol: Number(burnSpend) / LAMPORTS, slippage: c.slippage, priorityFee: c.priorityFee });
+        await this.submit(rpc, 'burnbuy', { spend: burnSpend.toString(), mint: c.mint }, built);
+      }
+      // 2c. Burn exactly what was bought for burning (also retries an earlier failed burn).
+      const owed = this.big('burn_owed_raw');
+      if (owed > 0n) {
+        const built = await buildBurnTx(rpc, signer, {
           mint: c.mint,
           program: this.get('mint_program', TOKEN_PROGRAM),
-          amount: bought,
+          amount: owed,
           decimals: Number(this.get('mint_decimals', '6')),
           microLamports: c.microLamports,
         });
-        this.addBig('burned_raw', bought);
-        this.addBig('burn_sol_lamports', burnSpend);
-        this.event({ kind: 'burn', sig, wallet: me, amountRaw: bought, lamports: burnSpend, meta: { buySig } });
+        await this.submit(rpc, 'burn', { amount: owed.toString(), lamports: this.big('burn_owed_lamports').toString(), buySig: this.get('burn_buy_sig') }, built);
       }
+      return true;
     }
 
+    // stage === 'pay'
     // 3. Snapshot holders and credit each one's share of the reward pool.
     const decimals = Number(this.get('mint_decimals', '6'));
     const accounts = await rpc.getHolderAccounts(c.mint, this.get('mint_program', TOKEN_PROGRAM));
@@ -352,51 +515,31 @@ export class Vault {
     for (const [wallet, s] of shares) {
       const row = this.sql.exec('SELECT raw FROM owed WHERE wallet = ?', wallet).toArray()[0];
       const next = (row ? BigInt(row.raw) : 0n) + s;
-      this.sql.exec(
-        'INSERT INTO owed (wallet, raw) VALUES (?, ?) ON CONFLICT(wallet) DO UPDATE SET raw = excluded.raw',
-        wallet,
-        next.toString(),
-      );
+      this.sql.exec('INSERT INTO owed (wallet, raw) VALUES (?, ?) ON CONFLICT(wallet) DO UPDATE SET raw = excluded.raw', wallet, next.toString());
     }
     this.set('reward_pool_raw', dust.toString());
 
-    // 4. Pay out, never more than the treasury actually holds.
+    // 4. Pay out, never more than the treasury actually holds (minus tokens
+    // still waiting to be burned, when the reward is the vault token itself).
     const rewardDecimals = Number(this.get('reward_decimals', String(decimals)));
     const rewardProgram = this.get('reward_program', TOKEN_PROGRAM);
     const owedMap = new Map(this.sql.exec('SELECT wallet, raw FROM owed').toArray().map((r) => [r.wallet, BigInt(r.raw)]));
     let picks = selectPayouts(owedMap, toRaw(c.minPayout, rewardDecimals), c.maxRecipients);
-    if (!picks.length) return;
+    if (!picks.length) return true;
     let held = await this.rewardBalance(rpc, me, rewardMint);
+    if (!c.rewardMint) held -= this.big('burn_owed_raw');
     picks = picks.filter((p) => {
       if (p.amount > held) return false;
       held -= p.amount;
       return true;
     });
     for (const batch of chunk(picks, c.perTx)) {
-      const sig = await sendPayoutBatch(rpc, signer, {
-        rewardMint,
-        rewardProgram,
-        decimals: rewardDecimals,
-        items: batch,
-        microLamports: c.microLamports,
-      });
-      const ts = Date.now();
-      for (const it of batch) {
-        const row = this.sql.exec('SELECT raw, paid_raw FROM owed WHERE wallet = ?', it.wallet).toArray()[0];
-        const left = BigInt(row.raw) - it.amount;
-        const paid = BigInt(row.paid_raw) + it.amount;
-        this.sql.exec(
-          'UPDATE owed SET raw = ?, paid_raw = ?, payouts = payouts + 1, last_paid = ? WHERE wallet = ?',
-          (left > 0n ? left : 0n).toString(),
-          paid.toString(),
-          ts,
-          it.wallet,
-        );
-        this.addBig('rewards_paid_raw', it.amount);
-        this.event({ kind: 'payout', sig, wallet: it.wallet, amountRaw: it.amount, ts });
-      }
+      const items = batch.map((it) => ({ wallet: it.wallet, amount: it.amount.toString() }));
+      const built = await buildPayoutTx(rpc, signer, { rewardMint, rewardProgram, decimals: rewardDecimals, items, microLamports: c.microLamports });
+      await this.submit(rpc, 'payout', { items }, built);
       await sleep(300);
     }
+    return true;
   }
 
   async rewardBalance(rpc, owner, mint) {
@@ -404,11 +547,17 @@ export class Vault {
     return r.value.reduce((a, acc) => a + BigInt(acc.account.data.parsed.info.tokenAmount.amount), 0n);
   }
 
+  // Token balance gained since `before`, never negative.
+  async gainSince(rpc, owner, mint, before) {
+    const after = await this.rewardBalance(rpc, owner, mint);
+    return after > before ? after - before : 0n;
+  }
+
   async txWithRetry(rpc, sig) {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 4; i++) {
       const tx = await rpc.getTransaction(sig).catch(() => null);
       if (tx) return tx;
-      await sleep(1500);
+      await sleep(2000);
     }
     return null;
   }
@@ -476,14 +625,16 @@ export class Vault {
       lastCycleAt: lastCycle || null,
       nextCycleAt: lastCycle ? lastCycle + c.cycleMinutes * 60000 : null,
       snapshotAt: Number(this.get('snapshot_at', '0')) || null,
-      lastError: this.get('last_error') || null,
+      lastError: this.get('last_error') ? 'The last cycle hit an error. The team can see details in /admin.' : null,
+      pending: Boolean(this.get('pending')),
+      burnOwed: fromRaw(this.big('burn_owed_raw'), decimals),
       community: this.id.community(),
     };
   }
 
   feed(url) {
-    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 40)));
-    const after = Number(url.searchParams.get('after') || 0);
+    const limit = Math.min(100, Math.max(1, Math.floor(Number(url.searchParams.get('limit'))) || 40));
+    const after = Math.max(0, Math.floor(Number(url.searchParams.get('after')) || 0));
     const kinds = (url.searchParams.get('kinds') || 'buy,sell,claim,buyback,burn,payout').split(',').filter((k) => /^[a-z]+$/.test(k));
     const placeholders = kinds.map(() => '?').join(',');
     const rows = this.sql
@@ -551,12 +702,15 @@ export class Vault {
 
   async admin(req, p) {
     const key = this.env.ADMIN_KEY;
-    if (!key || req.headers.get('x-admin-key') !== key) return json({ error: 'unauthorized' }, 401);
+    if (!key || !sameKey(req.headers.get('x-admin-key') || '', key)) return json({ error: 'unauthorized' }, 401);
     if (p === '/api/admin/status') {
       return json({
         lastError: this.get('last_error'),
         lastClaimError: this.get('last_claim_error'),
         lastFeedError: this.get('last_feed_error'),
+        lastDropped: this.get('last_dropped'),
+        pending: this.get('pending') ? JSON.parse(this.get('pending')) : null,
+        burnOwed: this.get('burn_owed_raw', '0'),
         stats: await this.stats(),
       });
     }
@@ -567,9 +721,10 @@ export class Vault {
       return json({ paused: body.paused ? true : false });
     }
     if (p === '/api/admin/run') {
+      if (this.running) return json({ ok: false, error: 'a run is already in progress, try again in a minute' }, 409);
       this.set('last_cycle_at', '0');
-      await this.tick();
-      return json({ ok: true, lastError: this.get('last_error') });
+      await this.tick('all');
+      return json({ ok: true, lastError: this.get('last_error'), lastClaimError: this.get('last_claim_error'), pending: this.get('pending') || null });
     }
     return json({ error: 'not found' }, 404);
   }

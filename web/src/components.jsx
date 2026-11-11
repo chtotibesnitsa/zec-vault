@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ago, fmtNum, rawToUi, short, solscanAcct, solscanTx } from './api.js';
 import { brand } from './brand.js';
+import { KIND_TONE } from './nav.jsx';
 
 // Link props for an event: real ones open Solscan, samples link nowhere.
 export const txLink = (e) => (e.sample || !e.sig ? {} : { href: solscanTx(e.sig), target: '_blank', rel: 'noreferrer' });
@@ -214,7 +215,7 @@ export function Marquee({ events, cfg }) {
   const row = items.map((e) => {
     const t = eventText(e, cfg);
     return (
-      <a key={e.id} {...txLink(e)} className={`tk-item k-${e.kind}`}>
+      <a key={e.id} {...txLink(e)} className={`tk-item k-${e.kind} tone-${KIND_TONE[e.kind] || 'vault'}`}>
         <b className="pixel">{t.tag}</b> {t.text}
         {e.sample && <i className="sample-tag pixel">sample</i>}
       </a>
@@ -243,7 +244,7 @@ export function Toasts({ items, cfg }) {
       {items.map((e) => {
         const t = eventText(e, cfg);
         return (
-          <a key={e.id} className={`toast k-${e.kind}`} {...txLink(e)}>
+          <a key={e.id} className={`toast k-${e.kind} tone-${KIND_TONE[e.kind] || 'vault'}`} {...txLink(e)}>
             <span className="toast-top">
               <b className="pixel">{t.tag}</b>
               <span className="pixel muted">{hhmmss(e.ts)}</span>
@@ -299,7 +300,7 @@ export function FeedTable({ events, cfg, empty }) {
       {events.slice(0, 30).map((e) => {
         const t = eventText(e, cfg);
         return (
-          <li key={e.id} className={`log-row k-${e.kind} enter`}>
+          <li key={e.id} className={`log-row k-${e.kind} tone-${KIND_TONE[e.kind] || 'vault'} enter`}>
             <span className="log-ts">{hhmmss(e.ts)}</span>
             <span className="log-tag pixel">{TAGS[e.kind] || t.tag}</span>
             <span className="log-text">{t.text}</span>

@@ -44,16 +44,33 @@ export function isValidAddress(addr) {
   }
 }
 
-async function signAndSend(rpc, tx, signer) {
+// Every money transaction goes through two steps: build + sign (the signature
+// is known before anything is sent, so the vault can record it as pending),
+// then send + confirm. A confirm timeout is NOT a failure: the transaction may
+// still land, so the caller keeps it pending and settles it later.
+async function finish(rpc, signer, tx, lastValid) {
   tx.sign([signer]);
-  const sig = await rpc.sendRaw(bytesToB64(tx.serialize()));
-  const c = await rpc.confirm(sig);
-  if (!c.ok) {
-    const e = new Error(`tx ${sig} failed: ${JSON.stringify(c.err)}`);
-    e.sig = sig;
-    throw e;
+  return { tx, sig: bs58.encode(tx.signatures[0]), lastValid };
+}
+
+// Upper bound for when a transaction built elsewhere (PumpPortal, Jupiter) can
+// no longer land. Waiting a little too long is safe; too short is not.
+async function lastValidSoon(rpc) {
+  return (await rpc.getBlockHeight()) + 160;
+}
+
+export async function sendSigned(rpc, built) {
+  try {
+    await rpc.sendRaw(bytesToB64(built.tx.serialize()));
+  } catch (e) {
+    // A JSON-RPC error (failed preflight) means the network rejected it outright.
+    // A network error is ambiguous: it may have been received, so keep it pending.
+    return e.rpc ? { state: 'failed', err: e.message } : { state: 'pending', err: e.message };
   }
-  return sig;
+  const c = await rpc.confirm(built.sig);
+  if (c.ok) return { state: 'ok' };
+  if (c.err === 'timeout') return { state: 'pending', err: 'timeout' };
+  return { state: 'failed', err: c.err };
 }
 
 // PumpPortal local API returns raw bytes of an unsigned VersionedTransaction.
@@ -70,19 +87,15 @@ async function pumpPortalTx(body) {
   return VersionedTransaction.deserialize(new Uint8Array(await res.arrayBuffer()));
 }
 
-// Claims all pump.fun creator fees owed to the treasury wallet.
-export async function collectCreatorFees(rpc, signer, { priorityFee }) {
-  const tx = await pumpPortalTx({
-    publicKey: signer.publicKey.toBase58(),
-    action: 'collectCreatorFee',
-    priorityFee,
-  });
-  return signAndSend(rpc, tx, signer);
+// Claim of all pump.fun creator fees owed to the treasury wallet.
+export async function buildClaimTx(rpc, signer, { priorityFee }) {
+  const tx = await pumpPortalTx({ publicKey: signer.publicKey.toBase58(), action: 'collectCreatorFee', priorityFee });
+  return finish(rpc, signer, tx, await lastValidSoon(rpc));
 }
 
-// Buys the vault's own token with SOL (works on the bonding curve and after
-// migration with pool "auto").
-export async function buyOwnToken(rpc, signer, { mint, sol, slippage, priorityFee }) {
+// Buy of the vault's own token with SOL (bonding curve, or the AMM after
+// migration, via pool "auto").
+export async function buildBuyTx(rpc, signer, { mint, sol, slippage, priorityFee }) {
   const tx = await pumpPortalTx({
     publicKey: signer.publicKey.toBase58(),
     action: 'buy',
@@ -93,11 +106,11 @@ export async function buyOwnToken(rpc, signer, { mint, sol, slippage, priorityFe
     priorityFee,
     pool: 'auto',
   });
-  return signAndSend(rpc, tx, signer);
+  return finish(rpc, signer, tx, await lastValidSoon(rpc));
 }
 
-// Swaps SOL into another reward token (for example a wrapped ZEC) via Jupiter.
-export async function swapViaJupiter(rpc, signer, { outputMint, lamports, slippageBps, apiBase, apiKey }) {
+// Swap of SOL into another reward token via Jupiter.
+export async function buildJupiterTx(rpc, signer, { outputMint, lamports, slippageBps, apiBase, apiKey }) {
   const headers = { 'content-type': 'application/json' };
   if (apiKey) headers['x-api-key'] = apiKey;
   const q = new URL(`${apiBase}/quote`);
@@ -120,14 +133,14 @@ export async function swapViaJupiter(rpc, signer, { outputMint, lamports, slippa
     }),
   });
   if (!swapRes.ok) throw new Error(`Jupiter swap HTTP ${swapRes.status}`);
-  const { swapTransaction } = await swapRes.json();
+  const { swapTransaction, lastValidBlockHeight } = await swapRes.json();
   const tx = VersionedTransaction.deserialize(b64ToBytes(swapTransaction));
-  return signAndSend(rpc, tx, signer);
+  return finish(rpc, signer, tx, lastValidBlockHeight || (await lastValidSoon(rpc)));
 }
 
-// Sends one batch of reward transfers in a single transaction. Each recipient
-// gets an idempotent ATA create (no-op if it exists) plus a checked transfer.
-export async function sendPayoutBatch(rpc, signer, { rewardMint, rewardProgram, decimals, items, microLamports }) {
+// One batch of reward transfers in a single transaction. Each recipient gets
+// an idempotent ATA create (no-op if it exists) plus a checked transfer.
+export async function buildPayoutTx(rpc, signer, { rewardMint, rewardProgram, decimals, items, microLamports }) {
   const mint = new PublicKey(rewardMint);
   const programId = new PublicKey(rewardProgram);
   const from = getAssociatedTokenAddressSync(mint, signer.publicKey, false, programId);
@@ -139,25 +152,38 @@ export async function sendPayoutBatch(rpc, signer, { rewardMint, rewardProgram, 
     const owner = new PublicKey(it.wallet);
     const to = getAssociatedTokenAddressSync(mint, owner, false, programId);
     ixs.push(createAssociatedTokenAccountIdempotentInstruction(signer.publicKey, to, owner, mint, programId));
-    ixs.push(createTransferCheckedInstruction(from, mint, to, signer.publicKey, it.amount, decimals, [], programId));
+    ixs.push(createTransferCheckedInstruction(from, mint, to, signer.publicKey, BigInt(it.amount), decimals, [], programId));
   }
-  const { blockhash } = await rpc.getLatestBlockhash();
+  const { blockhash, lastValidBlockHeight } = await rpc.getLatestBlockhash();
   const msg = new TransactionMessage({ payerKey: signer.publicKey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message();
-  const tx = new VersionedTransaction(msg);
-  return signAndSend(rpc, tx, signer);
+  return finish(rpc, signer, new VersionedTransaction(msg), lastValidBlockHeight);
 }
 
-// Burns tokens held by the treasury (buyback and burn). Supply goes down for good.
-export async function burnTokens(rpc, signer, { mint, program, amount, decimals, microLamports }) {
+export async function sendPayoutBatch(rpc, signer, opts) {
+  const built = await buildPayoutTx(rpc, signer, opts);
+  const r = await sendSigned(rpc, built);
+  if (r.state !== 'ok') throw Object.assign(new Error(`tx ${built.sig} ${r.state}`), { sig: built.sig, pending: r.state === 'pending' });
+  return built.sig;
+}
+
+// Burn of tokens held by the treasury. Supply goes down for good.
+export async function buildBurnTx(rpc, signer, { mint, program, amount, decimals, microLamports }) {
   const m = new PublicKey(mint);
   const programId = new PublicKey(program);
   const ata = getAssociatedTokenAddressSync(m, signer.publicKey, false, programId);
   const ixs = [
     ComputeBudgetProgram.setComputeUnitLimit({ units: 30000 }),
     ComputeBudgetProgram.setComputeUnitPrice({ microLamports }),
-    createBurnCheckedInstruction(ata, m, signer.publicKey, amount, decimals, [], programId),
+    createBurnCheckedInstruction(ata, m, signer.publicKey, BigInt(amount), decimals, [], programId),
   ];
-  const { blockhash } = await rpc.getLatestBlockhash();
+  const { blockhash, lastValidBlockHeight } = await rpc.getLatestBlockhash();
   const msg = new TransactionMessage({ payerKey: signer.publicKey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message();
-  return signAndSend(rpc, new VersionedTransaction(msg), signer);
+  return finish(rpc, signer, new VersionedTransaction(msg), lastValidBlockHeight);
+}
+
+export async function burnTokens(rpc, signer, opts) {
+  const built = await buildBurnTx(rpc, signer, opts);
+  const r = await sendSigned(rpc, built);
+  if (r.state !== 'ok') throw Object.assign(new Error(`tx ${built.sig} ${r.state}`), { sig: built.sig, pending: r.state === 'pending' });
+  return built.sig;
 }

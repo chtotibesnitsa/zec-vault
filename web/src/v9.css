@@ -1,0 +1,98 @@
+/* ==========================================================================
+   v9: performance + real 3D.
+   The glass cards used to blur a full-screen background that was itself
+   animating (drifting orbs, a scrolling floor, moving stars), so the browser
+   re-blurred every card on every frame. Now the background is still, cards
+   use a richer translucent fill instead of live blur (only the nav, modals
+   and toasts keep blur), and the small objects are real WebGL models drawn
+   by one shared renderer (see src/3d/).
+   ========================================================================== */
+
+:root { --glass-fill: color-mix(in srgb, var(--card) 86%, transparent); }
+:root[data-theme='light'] { --glass-fill: color-mix(in srgb, var(--card) 90%, transparent); }
+
+.card, .lpanel, .proofbar, .burn-card, .faq details, .spec, .buy-card, .estimator, .swap, .flow-viz,
+.st-step, .hm-step, .usage-item, .key-item, .stats-4 .stat, .holdcheck, .earners, .h5-kicker,
+.swapcard, .pulse, .glass, .scene-legend span, [data-vault='zec'] .proofbar {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.scene-legend span { background: rgba(10, 10, 12, 0.78); }
+
+/* a still background: same look, no per-frame repaint */
+.orb, .horizon i, .stars, .stars::after, .h5-blob, .h5-aura, .h5-orbit, .h5-orbit::before { animation: none !important; }
+.orb { will-change: auto; transform: none; }
+.floaters3d { display: none; }
+.page { animation-name: pageIn9; }
+@keyframes pageIn9 { from { opacity: 0; transform: translateY(10px); } }
+.rv { transform: translateY(26px) !important; }
+
+/* ---------- real 3D objects (WebGL, one shared renderer) ---------- */
+.o3 { perspective: none; transform-style: flat; }
+.o3-floor { filter: none; background: radial-gradient(closest-side, color-mix(in srgb, var(--tone) 34%, rgba(0, 0, 0, 0.65)), transparent); }
+.o3-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.o-token .o3-floor { left: 22%; right: 22%; bottom: 6px; }
+
+/* ---------- live page scene labels ---------- */
+.s3-labels { position: absolute; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; }
+.s3-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -100%;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  font: 700 11px/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  white-space: nowrap;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+}
+.s3-tag small { font: 500 11.5px/1.2 var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); }
+.s3-tag::after { content: ''; width: 1px; height: 14px; margin-top: 4px; background: linear-gradient(currentColor, transparent); opacity: 0.6; }
+.s3-pop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -100%;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font: 600 12px/1 var(--mono);
+  color: #0b0b0d;
+  background: var(--c, var(--c-pay));
+  box-shadow: 0 6px 18px -6px var(--c, var(--c-pay));
+  white-space: nowrap;
+  animation: s3pop 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@keyframes s3pop {
+  0% { opacity: 0; margin-top: 6px; scale: 0.8; }
+  12% { opacity: 1; margin-top: 0; scale: 1; }
+  75% { opacity: 1; }
+  100% { opacity: 0; margin-top: -26px; }
+}
+@media (max-width: 860px) {
+  .s3-tag small { display: none; }
+  .s3-pop { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .s3-pop { animation: none; display: none; }
+}
+
+/* the live pipeline needs room under the title */
+.scene-reactor .scene-frame, .scene-podium .scene-frame { height: clamp(420px, 50vw, 580px); }
+.scene-reactor .scene-copy { max-width: min(380px, 46%); }
+@media (max-width: 860px) {
+  .scene-reactor .scene-frame, .scene-podium .scene-frame { height: 520px; }
+  .scene-reactor .scene-copy { max-width: 90%; }
+}
+
+/* hero: one WebGL canvas, the ASCII view is a shader pass */
+.hero3d-gl { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; display: block; filter: drop-shadow(0 0 6px var(--glow, transparent)); }
+@media (max-width: 860px) {
+  .scene-reactor .scene-legend { display: none; }
+}
+@media (max-width: 860px) {
+  .scene-reactor .scene-frame { height: 600px; }
+}

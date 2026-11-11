@@ -93,6 +93,27 @@ node trailer/render.cjs web/dist teaser zatoshi-teaser.mp4 zec
 
 The soundtrack is synthesized by `trailer/sfx.py`, so no samples or licenses are involved. Activity in the trailer is a redacted UI preview, never real or invented wallets.
 
+## Cinematic ad
+`/ad.html` plays the long-form ad live (104 s, 16:9); `/ad.html?cut=vertical` is the 62 s 9:16 cut for TikTok, Reels and Shorts. Add `&t=40` to start at a given second. It is one three.js world (gold coin, glyph field, liquid-glass vault, fee split ring, holder field, furnace, leaderboards) plus a type layer in the site's fonts and colors, all driven by one timeline in `web/src/ad/main.js`. The CTA site and X handle are the `SITE` and `X_HANDLE` constants at the top of that file.
+
+To render a 4K60 MP4 with the original score (needs Node with Playwright, ffmpeg, and Python with numpy and scipy):
+
+```
+cd web && npm run build && cd ..
+node trailer/render-ad.cjs web/dist main zatoshi-ad-4k60.mp4
+node trailer/render-ad.cjs web/dist vertical zatoshi-ad-vertical-4k60.mp4
+```
+
+`--dpr 1` renders 1080p and is about 4× faster. `--stills 1,13,40 <dir>` writes review frames. `--audio-only` writes just the score. Frames are captured by several headless pages in parallel (`--workers`), saved to disk and encoded at the end, so an interrupted render resumes where it stopped. The score is synthesized by `trailer/score.py` from the shot plan and cue list the page exports (120 BPM, D minor), so every hit, riser and whoosh lands on the cut and no samples or licenses are involved. The activity rows in the proof shot are a redacted UI preview, never real or invented wallets.
+
+### Ad 2 (fast-cut product trailer)
+`/ad2.html` is a 78 s fast-cut version: glass UI cards of the vault (wallet, live board, split, payout timer, burn counter, swap, sign-in, leaderboards) floating in CSS 3D, slam words and color floods, with Solana, Pump.fun, Jupiter, Phantom, Solflare, Backpack, MetaMask and X marks. `?cut=vertical` is the 9:16 version of the same story. Code is in `web/src/ad2/`. The marks in `logos.js` are simplified redraws; swap in official SVGs there if you have them. Render it with the same script and `--page ad2`:
+
+```
+node trailer/render-ad.cjs web/dist main zatoshi-ad2-16x9.mp4 --page ad2
+node trailer/render-ad.cjs web/dist vertical zatoshi-ad2-9x16.mp4 --page ad2
+```
+
 ### Reward token choices
 - **Own coin (default).** Fees buy the coin back and hand it to holders, like a buyback but paid out instead of burned. Always works.
 - **Wrapped ZEC.** Zenrock's zenZEC is wrapped ZEC on Solana, backed 1:1 by its issuer. Get the mint address from Zenrock's own site or app, check it on Solscan, then set `REWARD_MINT` and `REWARD_SYMBOL`.
