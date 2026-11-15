@@ -43,13 +43,14 @@ export function textGeo(face, str, size, depth, bevel = size * 0.04) {
 }
 
 export const COL = {
-  pay: 0xf2b440,
+  // muted, matching the site palette (v10.css): no neon
+  pay: 0xe9b44c,
   gold: 0xe9a93a,
-  burn: 0xff6b3d,
-  vault: 0x38c6e6,
-  trade: 0x4fd88a,
-  sell: 0xff5c6c,
-  people: 0xa98bff,
+  burn: 0xd97a52,
+  vault: 0x7f9ddc,
+  trade: 0x7dbd96,
+  sell: 0xd4776f,
+  people: 0xa99cd9,
   sol: 0x9945ff,
   sol2: 0x14f195,
   steel: 0x2a2b31,
@@ -428,6 +429,7 @@ export const swarmCoinGeo = () =>
   });
 
 export function roundBox(w, h, d, r = 0.06, seg = 4) {
+  r = Math.min(r, Math.min(w, h, d) / 2 - 1e-4); // a radius over half a side makes NaN geometry
   return geo(`rb${w}|${h}|${d}|${r}|${seg}`, () => new RoundedBoxGeometry(w, h, d, seg, r));
 }
 
@@ -468,6 +470,7 @@ export function shadow(r = 1, o = 0.5, y = 0) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 2, r * 2), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: o, depthWrite: false }));
   m.rotation.x = -Math.PI / 2;
   m.position.y = y;
+  m.userData.fakeShadow = true;
   return m;
 }
 
@@ -535,4 +538,35 @@ export function dashTex() {
   );
   t.wrapS = THREE.RepeatWrapping;
   return t;
+}
+
+// A solid, glossy flame in the style of 3D icon sets: an orange outer
+// tongue with a yellow core in front, both emitting light (a path tracer
+// lights the scene with them). h = height.
+export function iconFlame(h = 1) {
+  const g = new THREE.Group();
+  const tongue = (w, hh, lean) => {
+    const pts = [];
+    for (let i = 0; i <= 24; i++) {
+      const v = i / 24;
+      const r = Math.sin(Math.pow(v, 0.42) * Math.PI) * Math.pow(1 - v, 1.05) * w * 1.35;
+      pts.push(new THREE.Vector2(Math.max(0.0005, r), v * hh));
+    }
+    const geo = new THREE.LatheGeometry(pts, 48);
+    // bend the tip sideways so it reads as a living flame, not a cone
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i) / hh;
+      p.setX(i, p.getX(i) + Math.sin(y * Math.PI * 1.5) * lean * y * 1.6);
+    }
+    geo.computeVertexNormals();
+    return geo;
+  };
+  const outer = new THREE.Mesh(tongue(0.4 * h, 1.45 * h, 0.16 * h), new THREE.MeshPhysicalMaterial({ color: 0xff5a1e, emissive: 0xff4a10, emissiveIntensity: 0.75, roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.15 }));
+  const mid = new THREE.Mesh(tongue(0.28 * h, 1.0 * h, -0.12 * h), new THREE.MeshPhysicalMaterial({ color: 0xff9a2a, emissive: 0xff7a10, emissiveIntensity: 0.95, roughness: 0.3, clearcoat: 1 }));
+  mid.position.set(0.02 * h, 0, 0.14 * h);
+  const core = new THREE.Mesh(tongue(0.16 * h, 0.6 * h, 0.06 * h), new THREE.MeshPhysicalMaterial({ color: 0xffd36a, emissive: 0xffc040, emissiveIntensity: 1.2, roughness: 0.3, clearcoat: 1 }));
+  core.position.set(0, 0, 0.26 * h);
+  g.add(outer, mid, core);
+  return g;
 }

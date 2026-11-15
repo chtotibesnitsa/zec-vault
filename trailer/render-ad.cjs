@@ -3,7 +3,7 @@
 //
 // usage:
 //   node trailer/render-ad.cjs <dist dir | http://dev-server> <main|vertical> <out.mp4> [--fps 60] [--dpr 2] [--workers 3]
-//        [--from 0 --to 104] [--crf 16] [--preset medium] [--keep-frames] [--page ad|ad2]   (dpr 2 = 4K / 2160x3840)
+//        [--from 0 --to 104] [--crf 16] [--preset medium] [--keep-frames] [--page ad|ad2] [--score score.py|score2.py]   (dpr 2 = 4K / 2160x3840)
 //   node trailer/render-ad.cjs <dist|url> <cut> <outdir> --stills 1,8.5,13      (review frames as JPEGs)
 //   node trailer/render-ad.cjs <dist|url> <cut> <out.wav> --audio-only
 // Env: FFMPEG (path to ffmpeg), PYTHON (python with numpy+scipy), CHROME (optional browser binary).
@@ -65,7 +65,7 @@ function serve() {
   const writeScore = (wav) => {
     const plan = base2 + '.plan.json';
     fs.writeFileSync(plan, JSON.stringify({ duration: ad.duration, cues: ad.cues, plan: ad.plan }));
-    execFileSync(PY, [path.join(__dirname, 'score.py'), plan, wav], { stdio: 'inherit' });
+    execFileSync(PY, [path.join(__dirname, opt('score', 'score.py')), plan, wav], { stdio: 'inherit' });
   };
 
   if (stills) {

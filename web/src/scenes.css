@@ -1,0 +1,184 @@
+/* ==========================================================================
+   Page visuals: live fire, the swap stage, the leaderboard chart, the fee
+   chart and the coin on the start card. CSS transforms and opacity only.
+   ========================================================================== */
+
+/* ---------- vector coins inside flyers and cards ---------- */
+.flyer .coin, .stream .coin { width: 100%; height: 100%; }
+.o-vcoin { display: grid !important; place-items: center; }
+.o-vcoin .coin { --s: 84px; --dur: 5s; }
+
+/* ---------- fire that burns ---------- */
+.lp-st { container-type: inline-size; }
+.fire { position: absolute; z-index: 2; left: 50%; bottom: 47%; width: 50%; height: 78%; translate: -50% 0; pointer-events: none; }
+.flames { position: absolute; inset: 0; }
+.fl {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 46%;
+  height: 74%;
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  transform-origin: 50% 100%;
+  translate: -50% 0;
+  mix-blend-mode: screen;
+  background: radial-gradient(60% 55% at 50% 72%, #fff3c4 0%, #ffd060 22%, #ff8a2a 55%, rgba(220, 60, 20, 0.85) 78%, rgba(160, 30, 10, 0) 100%);
+  animation: flick 0.9s ease-in-out infinite alternate;
+}
+.fl.f1 { width: 40%; height: 62%; left: 30%; animation-duration: 0.7s; animation-delay: -0.2s; }
+.fl.f2 { width: 38%; height: 58%; left: 70%; animation-duration: 0.8s; animation-delay: -0.5s; }
+.fl.f3 { width: 52%; height: 90%; animation-duration: 1.05s; }
+.fl.f4 { width: 30%; height: 70%; left: 42%; animation-duration: 0.6s; animation-delay: -0.3s; }
+.fl.f5 { width: 28%; height: 66%; left: 60%; animation-duration: 0.75s; animation-delay: -0.1s; }
+.fl.core { width: 26%; height: 44%; background: radial-gradient(60% 60% at 50% 70%, #fffbe8, #ffe08a 50%, rgba(255, 170, 60, 0) 100%); animation-duration: 0.5s; }
+@keyframes flick {
+  0% { transform: scale(1, 1) skewX(0deg); }
+  33% { transform: scale(0.92, 1.08) skewX(4deg); }
+  66% { transform: scale(1.06, 0.94) skewX(-5deg); }
+  100% { transform: scale(0.96, 1.12) skewX(2deg); }
+}
+.ember {
+  position: absolute;
+  bottom: 18%;
+  left: calc(50% + var(--x));
+  width: 3.4cqw;
+  height: 3.4cqw;
+  border-radius: 50%;
+  background: #ffcf6a;
+  box-shadow: 0 0 6px #ff9a3a;
+  opacity: 0;
+  animation: ember 2.2s ease-out infinite;
+  animation-delay: calc(var(--i) * -0.27s);
+}
+@keyframes ember {
+  0% { opacity: 0; transform: translate(0, 0) scale(1); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(var(--i) * 3px - 12px), -18cqw) scale(0.3); }
+}
+/* coins drop in, char, shrink and are gone */
+.fire-coins { position: absolute; inset: 0; }
+.burning { position: absolute; left: 50%; bottom: 12%; width: 40%; aspect-ratio: 1; translate: -50% 0; opacity: 0; animation: burnCoin 4.4s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.burning.b2 { animation-delay: -2.2s; left: 44%; }
+.burning .coin { width: 100%; height: 100%; }
+@keyframes burnCoin {
+  0% { opacity: 0; transform: translateY(-150%) rotate(-30deg) scale(0.9); filter: none; }
+  12% { opacity: 1; }
+  38% { transform: translateY(-10%) rotate(12deg) scale(0.9); filter: none; }
+  55% { transform: translateY(6%) rotate(20deg) scale(0.8); filter: brightness(0.75) sepia(0.6) saturate(1.6); }
+  75% { opacity: 0.9; transform: translateY(14%) rotate(28deg) scale(0.5); filter: brightness(0.35) saturate(0.4); }
+  90%, 100% { opacity: 0; transform: translateY(20%) rotate(34deg) scale(0.15); filter: brightness(0.2); }
+}
+.lp-st.st-burn { width: 17%; }
+.lp-st.st-burn .lp-glow { background: radial-gradient(closest-side, rgba(255, 140, 60, 0.45), transparent); animation-duration: 1.2s; }
+.lp-st.st-burn img { translate: 0 8%; }
+.lp-scene.tall .lp-st.st-burn { width: 34%; }
+.lp-st.st-holders { width: 13%; }
+.lp-scene.tall .lp-st.st-holders { width: 28%; }
+
+/* ---------- swap stage ---------- */
+.swap-stage { container-type: size; }
+.ss-row { position: absolute; left: 44%; right: 4%; top: 50%; translate: 0 -50%; display: flex; align-items: center; justify-content: space-between; }
+.ss-big .coin { --s: min(22cqh, 13cqw); --dur: 6s; }
+.ss-big.zats .coin { --dur: 6.6s; }
+.ss-big { animation: ssFloat 5s ease-in-out infinite; }
+.ss-big.zats { animation-delay: -2.5s; }
+@keyframes ssFloat { 50% { transform: translateY(-10px); } }
+.ss-ring { position: relative; width: min(30cqh, 15cqw); aspect-ratio: 1; display: grid; place-items: center; align-content: center; text-align: center; }
+.ss-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ssr-track { fill: none; stroke: rgba(255, 255, 255, 0.08); stroke-width: 6; }
+.ssr-spin { fill: none; stroke: var(--c-trade); stroke-width: 6; stroke-linecap: round; stroke-dasharray: 60 493; transform-origin: 100px 100px; animation: ssSpin 2.4s linear infinite; }
+@keyframes ssSpin { to { transform: rotate(360deg); } }
+.ssr-inner { fill: color-mix(in srgb, var(--c-trade) 8%, transparent); stroke: color-mix(in srgb, var(--c-trade) 35%, transparent); stroke-width: 1.5; }
+.ss-ring b { position: relative; font: 800 min(7cqh, 3.6cqw) / 1 var(--body); color: var(--c-trade); letter-spacing: -0.03em; }
+.ss-ring small { position: relative; font-size: 12px; color: var(--muted); }
+.ss-stream { position: absolute; left: 44%; right: 4%; top: 50%; height: 0; }
+.ss-c { position: absolute; top: 0; width: min(7cqh, 3.4cqw); aspect-ratio: 1; translate: -50% -50%; opacity: 0; animation: ssStream 2.6s linear infinite; animation-delay: var(--d); }
+.ss-c .coin { width: 100%; height: 100%; }
+.ss-c.in { --x0: 14%; --x1: 46%; }
+.ss-c.out { --x0: 54%; --x1: 86%; }
+@keyframes ssStream {
+  0% { left: var(--x0); opacity: 0; transform: translateY(0) rotate(0); }
+  12% { opacity: 1; }
+  50% { transform: translateY(-34px) rotate(180deg); }
+  88% { opacity: 1; }
+  100% { left: var(--x1); opacity: 0; transform: translateY(0) rotate(360deg); }
+}
+@media (max-width: 760px) {
+  .ss-row, .ss-stream { left: 4%; top: 64%; }
+  .ss-big .coin { --s: 22cqw; }
+  .ss-ring { width: 26cqw; }
+  .ss-ring b { font-size: 7cqw; }
+  .ss-c { width: 7cqw; }
+}
+
+/* ---------- leaderboard chart ---------- */
+.boards-chart { container-type: size; }
+.bc-bars { position: absolute; left: 42%; right: 4%; top: 18%; bottom: 16%; display: flex; align-items: flex-end; gap: 1.2%; }
+.bc-col { flex: 1; height: 100%; display: grid; grid-template-rows: auto 1fr auto auto; justify-items: center; align-items: end; gap: 6px; min-width: 0; }
+.bc-val { font: 700 12px/1 var(--body); color: var(--ink); font-feature-settings: 'tnum' 1; opacity: 0; animation: bcFade 0.4s ease forwards; animation-delay: calc(0.5s + var(--i) * 0.07s); }
+.bc-bar { position: relative; width: 100%; height: calc(var(--h) * 1%); border-radius: 8px 8px 3px 3px; overflow: hidden; transform-origin: 50% 100%; animation: bcGrow 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--i) * 0.07s); background: linear-gradient(180deg, color-mix(in srgb, var(--c-people) 85%, #fff), color-mix(in srgb, var(--c-people) 45%, #1a1a22)); }
+.bc-bar i { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.22) 50%, transparent 70%); translate: -120% 0; animation: bcShine 3.2s ease-in-out infinite; animation-delay: calc(1.2s + var(--i) * 0.12s); }
+.r1 .bc-bar { background: linear-gradient(180deg, #ffe39a, var(--c-pay) 45%, #a8711a); }
+.r2 .bc-bar { background: linear-gradient(180deg, #f1f3f7, #b9bfca 45%, #6d7280); }
+.r3 .bc-bar { background: linear-gradient(180deg, #f2c49a, #c47a3f 45%, #7a4520); }
+.r1 .bc-val { color: var(--c-pay); }
+.bc-rank { font: 700 13px/1 var(--body); color: var(--muted); }
+.r1 .bc-rank { color: var(--c-pay); }
+.bc-who { font-size: 11px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-note { position: absolute; right: 4%; bottom: 5%; font-size: 12px; color: var(--muted); }
+@keyframes bcGrow { from { transform: scaleY(0); } }
+@keyframes bcFade { to { opacity: 1; } }
+@keyframes bcShine { 0%, 60% { translate: -120% 0; } 100% { translate: 120% 0; } }
+@media (max-width: 760px) {
+  .bc-bars { left: 5%; right: 5%; top: 40%; bottom: 14%; }
+  .bc-who { display: none; }
+}
+
+/* ---------- How page fee chart ---------- */
+.fee-donut { position: relative; width: 240px; display: grid; justify-items: center; gap: 14px; }
+.fee-donut svg { width: 220px; height: 220px; overflow: visible; }
+.fd-track { fill: none; stroke: rgba(255, 255, 255, 0.06); stroke-width: 24; }
+.fd-arc { fill: none; stroke: var(--tone); stroke-width: 24; stroke-dasharray: 0 999; stroke-dashoffset: var(--off); animation: fdDraw 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; animation-delay: calc(0.2s + var(--i) * 0.35s); }
+@keyframes fdDraw { to { stroke-dasharray: calc(var(--len) - 3) calc(var(--gap) + 3); } }
+.fd-center { position: absolute; top: 0; height: 220px; width: 220px; display: grid; place-content: center; text-align: center; gap: 2px; }
+.fd-center b { font: 800 40px/1 var(--body); color: var(--c-pay); letter-spacing: -0.03em; }
+.fd-center span { font-size: 12px; color: var(--muted); max-width: 120px; margin: 0 auto; }
+.fd-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; color: var(--muted); }
+.fd-legend li { display: flex; align-items: center; gap: 8px; }
+.fd-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--tone); }
+.fd-legend b { color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .fl, .ember, .burning, .ss-big, .ssr-spin, .ss-c, .bc-bar, .bc-bar i, .fd-arc { animation: none !important; }
+  .fd-arc { stroke-dasharray: calc(var(--len) - 3) calc(var(--gap) + 3); }
+  .bc-val { opacity: 1; }
+}
+
+/* responsive coin sizes beat the component's default size */
+.ss-big .coin { --s: min(22cqh, 12cqw) !important; }
+@media (max-width: 760px) { .ss-big .coin { --s: 19cqw !important; } .ss-ring { width: 22cqw; } }
+/* each value sits on its own bar */
+.bc-col { display: flex !important; flex-direction: column; justify-content: flex-end; align-items: center; }
+.bc-val { margin-bottom: 2px; }
+.bc-rank { margin-top: 4px; }
+@media (max-width: 760px) { .bc-note { display: none; } }
+/* the stream arcs over the ring instead of through its label */
+.ss-c { width: min(5cqh, 2.4cqw) !important; }
+@keyframes ssStream {
+  0% { left: var(--x0); opacity: 0; transform: translateY(0) rotate(0); }
+  12% { opacity: 1; }
+  50% { transform: translateY(-11cqh) rotate(180deg); }
+  88% { opacity: 1; }
+  100% { left: var(--x1); opacity: 0; transform: translateY(0) rotate(360deg); }
+}
+.ss-c.in { --x0: 16%; --x1: 50%; }
+.ss-c.out { --x0: 50%; --x1: 84%; }
+@media (max-width: 760px) {
+  .ss-c { width: 5cqw !important; }
+  .ss-c.in { --x0: 14%; --x1: 50%; }
+  .ss-c.out { --x0: 50%; --x1: 86%; }
+}
+/* coins enter and leave at the ring's edge, never across its label */
+.ss-c.in { --x1: 40% !important; }
+.ss-c.out { --x0: 60% !important; }
+@media (max-width: 760px) { .ss-c.in { --x0: 18% !important; --x1: 38% !important; } .ss-c.out { --x0: 62% !important; --x1: 82% !important; } }

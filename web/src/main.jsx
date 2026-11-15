@@ -19,5 +19,11 @@ import './v6.css';
 import './v7.css';
 import './v8.css';
 import './v9.css';
+import './v10.css';
+import './hero-clock.css';
+import './live-pipeline.css';
+import './coins.css';
+import './scenes.css';
+import './v11.css';
 
 createRoot(document.getElementById('root')).render(<App />);

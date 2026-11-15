@@ -1,82 +1,100 @@
-// Full-screen background for ad 2: drifting color blobs, a speed-line tunnel,
-// a ring, a perspective grid floor, a dot halo, stars, color floods and grain.
-// One fragment shader; every scene sets the uniforms it wants each frame.
+// Background for ad 2: a near-black base, two soft color washes in muted
+// tones (each scene picks its own), and a quiet drawn layer on top:
+// topographic contour lines and a halftone dot field that drift slowly.
+// Plus the effects a few scenes use: a speed-line tunnel, a ring, a dot halo,
+// embers, full-screen color floods and grain.
 const VS = `#version 300 es
 in vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }`;
 
 const FS = `#version 300 es
 precision highp float;
 uniform vec2 uRes; uniform float uTime;
-uniform vec3 uA, uB, uC; uniform float uBlob; uniform vec2 uBlobOff;
+uniform vec3 uA, uB; uniform float uWash; uniform vec2 uBlobOff;
+uniform float uContour, uHalftone, uSeed;
 uniform float uTun, uTunSpeed; uniform vec3 uTunC;
-uniform vec4 uFlood; uniform float uStars, uGrid, uRing, uRingR, uDots, uEmber;
-uniform vec3 uGridC, uRingC, uDotC;
+uniform vec4 uFlood; uniform float uStars, uRing, uRingR, uDots, uEmber;
+uniform vec3 uRingC, uDotC;
 uniform vec2 uCenter;
 out vec4 o;
 float h1(float x){ return fract(sin(x * 127.1) * 43758.5453); }
 float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3. - 2. * f);
+  return mix(mix(h2(i), h2(i + vec2(1, 0)), u.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), u.x), u.y);
+}
+float fbm(vec2 p){
+  float s = 0., a = 0.5;
+  for (int i = 0; i < 4; i++) { s += a * vn(p); p = p * 2.03 + 11.7; a *= 0.5; }
+  return s;
+}
 void main(){
   vec2 uv = gl_FragCoord.xy / uRes;
   float asp = uRes.x / uRes.y;
   vec2 p = (uv - 0.5) * vec2(asp, 1.0);
   float t = uTime;
-  vec3 col = vec3(0.016, 0.014, 0.018);
-  // blobs
-  vec2 b1 = vec2(-0.42 * asp, 0.22) + 0.12 * vec2(sin(t * 0.23), cos(t * 0.19)) + uBlobOff;
-  vec2 b2 = vec2(0.40 * asp, -0.18) + 0.14 * vec2(cos(t * 0.17), sin(t * 0.21)) - uBlobOff;
-  vec2 b3 = vec2(0.05 * asp, 0.42) + 0.10 * vec2(sin(t * 0.13 + 2.), cos(t * 0.29));
-  col += uA * exp(-dot(p - b1, p - b1) * 2.4) * 0.55 * uBlob;
-  col += uB * exp(-dot(p - b2, p - b2) * 2.2) * 0.55 * uBlob;
-  col += uC * exp(-dot(p - b3, p - b3) * 3.5) * 0.35 * uBlob;
-  // stars
+  vec3 col = vec3(0.034, 0.032, 0.031);
+  // washes: big, soft, low saturation
+  vec2 b1 = vec2(-0.55 * asp, 0.38) + 0.10 * vec2(sin(t * 0.17), cos(t * 0.13)) + uBlobOff;
+  vec2 b2 = vec2(0.55 * asp, -0.42) + 0.10 * vec2(cos(t * 0.11), sin(t * 0.15)) - uBlobOff;
+  float w1 = exp(-dot(p - b1, p - b1) * 1.1);
+  float w2 = exp(-dot(p - b2, p - b2) * 1.1);
+  col += uA * w1 * 0.32 * uWash + uB * w2 * 0.28 * uWash;
+  vec3 tint = normalize(uA * w1 + uB * w2 + 0.15) * 0.9;
+  // contour lines of a slowly drifting noise field
+  if (uContour > 0.) {
+    float f = fbm(p * 1.6 + vec2(uSeed, t * 0.03));
+    float k = f * 14.;
+    float d = abs(fract(k) - 0.5) / fwidth(k);
+    float line = 1. - clamp(d - 0.2, 0., 1.);
+    float major = step(0.5, fract(floor(k) * 0.25 + 0.01)) * 0.6 + 0.4;
+    col += tint * line * major * 0.11 * uContour * (0.4 + 0.6 * (w1 + w2));
+  }
+  // halftone dots sized by the same field
+  if (uHalftone > 0.) {
+    float cs = 12.0;
+    vec2 cell = floor(gl_FragCoord.xy / cs);
+    vec2 cc = (cell + 0.5) * cs / uRes;
+    vec2 pc = (cc - 0.5) * vec2(asp, 1.0);
+    float f = fbm(pc * 2.2 + vec2(uSeed * 2., -t * 0.04));
+    float r = smoothstep(0.42, 0.75, f) * 0.42;
+    float d = length(fract(gl_FragCoord.xy / cs) - 0.5);
+    col += tint * smoothstep(r, r - 0.08, d) * 0.11 * uHalftone;
+  }
   if (uStars > 0.) {
     vec2 g = floor(gl_FragCoord.xy / 3.0);
     float s = h2(g);
-    float tw = 0.6 + 0.4 * sin(t * 2. + s * 40.);
-    col += vec3(1.0, 0.95, 0.85) * step(0.9985, s) * tw * uStars * 0.8;
+    col += vec3(1.0, 0.96, 0.9) * step(0.9988, s) * (0.6 + 0.4 * sin(t * 2. + s * 40.)) * uStars * 0.6;
   }
   vec2 q = p - uCenter;
   float r = length(q);
   float a = atan(q.y, q.x) / 6.2831853 + 0.5;
-  // speed-line tunnel
   if (uTun > 0.) {
-    float N = 260.;
+    float N = 220.;
     float seg = floor(a * N);
     float rn = h1(seg);
     float f = abs(fract(a * N) - 0.5);
-    float w = 0.5 - (0.6 / N) / max(r, 0.02) * 0.0 ;
-    float line = smoothstep(0.5, 0.18, f);
+    float line = smoothstep(0.5, 0.2, f);
     float z = fract(rn * 7.13 + t * uTunSpeed * (0.5 + rn));
     float rr = pow(z, 1.6) * 1.6;
-    float len = 0.08 + rn * 0.35;
+    float len = 0.08 + rn * 0.3;
     float m = smoothstep(rr, rr + 0.02, r) * smoothstep(rr + len, rr + len - 0.05, r);
-    m *= step(0.35, rn) * smoothstep(0.04, 0.25, r);
-    col += uTunC * line * m * uTun * (0.5 + 0.8 * rn);
-    col += uTunC * exp(-r * 4.) * 0.18 * uTun;
+    m *= step(0.4, rn) * smoothstep(0.04, 0.25, r);
+    col += uTunC * line * m * uTun * (0.4 + 0.6 * rn);
+    col += uTunC * exp(-r * 4.) * 0.12 * uTun;
   }
-  // ring
   if (uRing > 0.) {
     float d = abs(r - uRingR);
-    col += uRingC * (exp(-d * d * 9000.) * 0.9 + exp(-d * 30.) * 0.08) * uRing;
+    col += uRingC * (exp(-d * d * 9000.) * 0.8 + exp(-d * 30.) * 0.06) * uRing;
   }
-  // grid floor
-  if (uGrid > 0. && p.y < -0.02) {
-    float zz = 0.35 / (-p.y);
-    vec2 g = vec2(p.x * zz, zz + t * 0.6);
-    vec2 gf = abs(fract(g * 1.4) - 0.5);
-    float gl = smoothstep(0.03 * zz, 0.0, min(gf.x, gf.y) - 0.0);
-    col += uGridC * gl * exp(-zz * 0.22) * uGrid * 0.55;
-  }
-  // dot halo (ASCII-like sphere of dots)
   if (uDots > 0.) {
     vec2 cell = fract(gl_FragCoord.xy / 14.) - 0.5;
     vec2 ci = floor(gl_FragCoord.xy / 14.);
     float d = length(cell);
     float fl = 0.55 + 0.45 * sin(t * 3. + h2(ci) * 30.);
     float mask = smoothstep(0.62, 0.3, r) * (0.35 + 0.65 * smoothstep(0.2, 0.55, r));
-    col += uDotC * smoothstep(0.26, 0.14, d) * mask * fl * uDots * 0.5;
+    col += uDotC * smoothstep(0.26, 0.14, d) * mask * fl * uDots * 0.4;
   }
-  // embers rising
   if (uEmber > 0.) {
     for (int i = 0; i < 3; i++) {
       float sc = 26. + float(i) * 18.;
@@ -84,16 +102,14 @@ void main(){
       vec2 ci = floor(g); vec2 cf = fract(g) - 0.5;
       float rn = h2(ci + float(i) * 13.);
       vec2 off = vec2(rn - 0.5, h2(ci + 7.) - 0.5) * 0.6;
-      float e = smoothstep(0.12, 0.0, length(cf - off)) * step(0.82, rn);
-      col += vec3(1.0, 0.45, 0.15) * e * uEmber * (1.0 - uv.y * 0.6) * 0.9;
+      float e = smoothstep(0.12, 0.0, length(cf - off)) * step(0.84, rn);
+      col += vec3(0.95, 0.55, 0.3) * e * uEmber * (1.0 - uv.y * 0.6) * 0.7;
     }
   }
-  // flood
-  vec3 fl = uFlood.rgb * (1.0 - 0.35 * dot(p, p));
+  vec3 fl = uFlood.rgb * (1.0 - 0.25 * dot(p, p));
   col = mix(col, fl, uFlood.a);
-  // vignette + grain
-  col *= 1.0 - 0.32 * dot(p * vec2(0.8, 1.0), p * vec2(0.8, 1.0));
-  col += (h2(gl_FragCoord.xy + fract(t * 7.3) * 100.) - 0.5) * 0.025;
+  col *= 1.0 - 0.3 * dot(p * vec2(0.8, 1.0), p * vec2(0.8, 1.0));
+  col += (h2(gl_FragCoord.xy + fract(t * 7.3) * 100.) - 0.5) * 0.02;
   o = vec4(max(col, 0.0), 1.0);
 }`;
 
@@ -118,7 +134,7 @@ export function makeBG(canvas) {
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   const U = {};
-  const names = ['uRes', 'uTime', 'uA', 'uB', 'uC', 'uBlob', 'uBlobOff', 'uTun', 'uTunSpeed', 'uTunC', 'uFlood', 'uStars', 'uGrid', 'uRing', 'uRingR', 'uDots', 'uEmber', 'uGridC', 'uRingC', 'uDotC', 'uCenter'];
+  const names = ['uRes', 'uTime', 'uA', 'uB', 'uWash', 'uBlobOff', 'uContour', 'uHalftone', 'uSeed', 'uTun', 'uTunSpeed', 'uTunC', 'uFlood', 'uStars', 'uRing', 'uRingR', 'uDots', 'uEmber', 'uRingC', 'uDotC', 'uCenter'];
   for (const n of names) U[n] = gl.getUniformLocation(prog, n);
   return {
     render(s, time) {
@@ -127,20 +143,20 @@ export function makeBG(canvas) {
       gl.uniform1f(U.uTime, time);
       gl.uniform3fv(U.uA, s.a);
       gl.uniform3fv(U.uB, s.b);
-      gl.uniform3fv(U.uC, s.c);
-      gl.uniform1f(U.uBlob, s.blob);
+      gl.uniform1f(U.uWash, s.wash);
       gl.uniform2fv(U.uBlobOff, s.blobOff);
+      gl.uniform1f(U.uContour, s.contour);
+      gl.uniform1f(U.uHalftone, s.halftone);
+      gl.uniform1f(U.uSeed, s.seed);
       gl.uniform1f(U.uTun, s.tun);
       gl.uniform1f(U.uTunSpeed, s.tunSpeed);
       gl.uniform3fv(U.uTunC, s.tunC);
       gl.uniform4fv(U.uFlood, s.flood);
       gl.uniform1f(U.uStars, s.stars);
-      gl.uniform1f(U.uGrid, s.grid);
       gl.uniform1f(U.uRing, s.ring);
       gl.uniform1f(U.uRingR, s.ringR);
       gl.uniform1f(U.uDots, s.dots);
       gl.uniform1f(U.uEmber, s.ember);
-      gl.uniform3fv(U.uGridC, s.gridC);
       gl.uniform3fv(U.uRingC, s.ringC);
       gl.uniform3fv(U.uDotC, s.dotC);
       gl.uniform2fv(U.uCenter, s.center);
@@ -154,11 +170,26 @@ export const hex = (h) => {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 };
 
+// Muted, natural palette. Zcash yellow is the anchor; the rest are earthy
+// and dusty so they sit together instead of glowing.
+export const PAL = {
+  zec: '#F4B728',
+  sand: '#D8B98A',
+  cream: '#EEE6D6',
+  sage: '#8FB49A',
+  terracotta: '#D9805A',
+  slate: '#7E9CBB',
+  plum: '#A58BC4',
+  teal: '#6FA9A0',
+  rose: '#D58F8A',
+  ink: '#16130F',
+};
+
 export function bgDefaults() {
   return {
-    a: hex('#5b3fb8'), b: hex('#1f6f9a'), c: hex('#c97a1c'), blob: 0.8, blobOff: [0, 0],
-    tun: 0, tunSpeed: 0.5, tunC: hex('#f6d48e'),
-    flood: [0, 0, 0, 0], stars: 0.6, grid: 0, gridC: hex('#e3a83a'),
-    ring: 0, ringR: 0.3, ringC: hex('#e3a83a'), dots: 0, dotC: hex('#e3a83a'), ember: 0, center: [0, 0],
+    a: hex(PAL.sand), b: hex(PAL.slate), wash: 1, blobOff: [0, 0], contour: 1, halftone: 0, seed: 0,
+    tun: 0, tunSpeed: 0.5, tunC: hex('#f3e9d6'),
+    flood: [0, 0, 0, 0], stars: 0.25,
+    ring: 0, ringR: 0.3, ringC: hex(PAL.zec), dots: 0, dotC: hex(PAL.zec), ember: 0, center: [0, 0],
   };
 }

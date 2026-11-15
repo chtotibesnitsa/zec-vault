@@ -60,7 +60,89 @@ function rects(rows, ch) {
   return out;
 }
 
-export function Px({ name, size = 28, className = '' }) {
+// Clean line icons (24px grid, round caps). Same names as the old pixel
+// set, so every call site keeps working; the pixel frames above are kept
+// for the trailer, which still uses the retro look (pixel prop).
+const LINE = {
+  coins: (
+    <>
+      <ellipse cx="9" cy="7" rx="6" ry="2.6" />
+      <path d="M3 7v4c0 1.4 2.7 2.6 6 2.6s6-1.2 6-2.6V7" />
+      <path d="M9 13.6c0 1.4 2.7 2.6 6 2.6s6-1.2 6-2.6V9.8c0-1.3-2.2-2.4-5-2.6" />
+      <path d="M9 13.6v3.8c0 1.4 2.7 2.6 6 2.6s6-1.2 6-2.6v-3.8" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  users: (
+    <>
+      <circle cx="9" cy="8.5" r="3.2" />
+      <path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" />
+      <path d="M15.5 5.6a3.2 3.2 0 0 1 0 6" />
+      <path d="M17.5 14.4c1.6.7 2.6 2.3 3 4.6" />
+    </>
+  ),
+  flame: <path d="M12 21c-3.9 0-6.5-2.6-6.5-6.1 0-3.1 2-5.1 3.6-7.2.4 1.6 1.3 2.6 2.4 3.1C11.2 7.5 12.3 5 14.8 3c-.2 2.8.9 4.4 2.2 6 1 1.3 1.5 2.7 1.5 4.6 0 4.3-2.7 7.4-6.5 7.4Z" />,
+  chart: (
+    <>
+      <path d="M4 20h16" />
+      <path d="M5 15.5l4-4.5 3.5 3L19 6.5" />
+      <path d="M15.5 6.5H19V10" />
+    </>
+  ),
+  swap: (
+    <>
+      <path d="M4 8h14l-3.5-3.5" />
+      <path d="M20 16H6l3.5 3.5" />
+    </>
+  ),
+  wallet: (
+    <>
+      <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H17v3" />
+      <rect x="4" y="8" width="16" height="11" rx="2.5" />
+      <path d="M16 13.5h1.5" />
+    </>
+  ),
+  bolt: <path d="M13 3 5.5 13.5H12L11 21l7.5-10.5H12L13 3Z" />,
+  eye: (
+    <>
+      <path d="M2.8 12c2-4 5.3-6 9.2-6s7.2 2 9.2 6c-2 4-5.3 6-9.2 6s-7.2-2-9.2-6Z" />
+      <circle cx="12" cy="12" r="2.8" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="M12 3 5 5.8v5.5c0 4.4 2.9 7.8 7 9.7 4.1-1.9 7-5.3 7-9.7V5.8L12 3Z" />
+      <path d="m9 12 2.2 2.2L15.5 10" />
+    </>
+  ),
+  pie: (
+    <>
+      <path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5H12V3.5Z" />
+      <path d="M15 3.8A8.5 8.5 0 0 1 20.2 9H15V3.8Z" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="5" y="10.5" width="14" height="10" rx="2.5" />
+      <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+      <path d="M12 14.5v2.5" />
+    </>
+  ),
+};
+
+export function Px({ name, size = 28, className = '', pixel = false }) {
+  if (!pixel && LINE[name]) {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} className={`ic ${className}`} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {LINE[name]}
+      </svg>
+    );
+  }
   const fr = ICONS[name];
   if (!fr) return null;
   return (

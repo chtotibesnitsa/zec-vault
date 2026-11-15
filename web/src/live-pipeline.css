@@ -1,0 +1,48 @@
+/* ==========================================================================
+   Live page: the fee pipeline made of 3D icons (see LivePipeline in
+   stills.jsx). Stations float, paths flow, coins fly between them.
+   ========================================================================== */
+.lp-scene { position: absolute; inset: 0; overflow: hidden; }
+
+.lp-paths { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.lp-path path { fill: none; stroke-linecap: round; }
+.lp-base { stroke: color-mix(in srgb, var(--tone) 22%, transparent); stroke-width: 6; }
+.lp-flow { stroke: var(--tone); stroke-width: 3; stroke-dasharray: 2 16; animation: lpFlow 1.1s linear infinite; }
+@keyframes lpFlow { to { stroke-dashoffset: -18; } }
+
+.lp-st {
+  position: absolute;
+  width: 15%;
+  aspect-ratio: 560 / 480;
+  translate: -50% -50%;
+  display: grid;
+  place-items: center;
+  animation: lpFloat 5s ease-in-out infinite;
+}
+.lp-st.st-vault { width: 19%; animation-duration: 6s; }
+.lp-st.st-burn { animation-delay: -1.6s; }
+.lp-st.st-holders { animation-delay: -3s; }
+.lp-st.st-trades { animation-delay: -0.8s; }
+@keyframes lpFloat { 50% { transform: translateY(-8px); } }
+.lp-st img { position: relative; z-index: 1; width: 118%; height: 118%; object-fit: contain; pointer-events: none; user-select: none; }
+.lp-glow { position: absolute; inset: 14% 10% 4%; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--tone) 30%, transparent), transparent); animation: lpGlow 3.6s ease-in-out infinite; }
+@keyframes lpGlow { 50% { opacity: 0.55; transform: scale(0.92); } }
+.lp-tag { position: absolute; z-index: 2; left: 50%; top: -6%; translate: -50% -100%; }
+
+/* coins and callouts ride above the stations */
+.lp-scene .still-layer { z-index: 3; }
+.lp-scene .flyer { width: 3.4%; }
+
+.lp-scene.tall .lp-st { width: 30%; }
+.lp-scene.tall .lp-st.st-vault { width: 38%; }
+.lp-scene.tall .lp-base { stroke-width: 5; }
+.lp-scene.tall .flyer { width: 8%; }
+.lp-scene.tall .lp-tag { top: -2%; }
+
+/* the live frame: room under the title, no dark stage */
+.scene-reactor .scene-frame { background: radial-gradient(70% 70% at 55% 70%, #1d1e24, var(--card)) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-st, .lp-flow, .lp-glow { animation: none !important; }
+}
+.lp-scene.tall .st-holders .lp-tag { top: auto; bottom: 2%; translate: -50% 100%; }

@@ -1,7 +1,7 @@
 // The small 3D objects inside the information boxes. Each builder returns
 // { root, tick(t, dt), view, sway } and is sized to fit a unit sphere.
 // Each one shows what its box says, and none repeats.
-import { THREE, COL, M, zatsCoin, solCoin, swarmCoinGeo, roundBox, bust, shadow, glowSprite, canvasTex, shapeFrom, ringShape, typeface, textGeo, ease, clamp01 } from './kit.js';
+import { THREE, COL, M, iconFlame, zatsCoin, solCoin, swarmCoinGeo, roundBox, bust, shadow, glowSprite, canvasTex, shapeFrom, ringShape, typeface, textGeo, ease, clamp01 } from './kit.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 
 const G = () => new THREE.Group();
@@ -173,6 +173,160 @@ const B = {
         slotGlow.material.opacity = 0.35 + Math.max(0, Math.sin(t * 2.6)) * 0.4;
       },
     };
+  },
+
+  // The home hero: an open vault, gold stacks inside, $ZATS spilling out.
+  herovault() {
+    const root = G();
+    const shell = new THREE.MeshPhysicalMaterial({ color: 0x2a2b31, metalness: 0.75, roughness: 0.32, clearcoat: 0.8, clearcoatRoughness: 0.18 });
+    const steel = M.metal(0xc5c9d2, 0.22);
+    const gold = M.gold();
+    const W = 2.2;
+    const H = 2.0;
+    const D = 1.7;
+    // body: an outer shell with a hollow front (frame + back + sides)
+    const body = G();
+    const wall = 0.16;
+    body.add(mesh(roundBox(W, H, wall, 0.05, 3), shell, 0, 0, -D / 2 + wall / 2));
+    body.add(mesh(roundBox(wall, H, D, 0.05, 3), shell, -W / 2 + wall / 2, 0, 0));
+    body.add(mesh(roundBox(wall, H, D, 0.05, 3), shell, W / 2 - wall / 2, 0, 0));
+    body.add(mesh(roundBox(W, wall, D, 0.05, 3), shell, 0, H / 2 - wall / 2, 0));
+    body.add(mesh(roundBox(W, wall, D, 0.05, 3), shell, 0, -H / 2 + wall / 2, 0));
+    // front frame lip with a brass edge
+    const lip = mesh(new THREE.TorusGeometry(1, 0.03, 12, 4), M.metal(0xc29a52, 0.25), 0, 0, D / 2);
+    lip.rotation.z = Math.PI / 4;
+    lip.scale.set((W - 0.12) / 1.414, (H - 0.12) / 1.414, 1);
+    body.add(lip);
+    // dark velvet interior and a warm light inside
+    const inner = new THREE.MeshStandardMaterial({ color: 0x1a1210, roughness: 0.95 });
+    body.add(mesh(new THREE.PlaneGeometry(W - wall * 2, H - wall * 2), inner, 0, 0, -D / 2 + wall + 0.005));
+    const shelf = mesh(roundBox(W - wall * 2, 0.05, D - wall, 0.02, 2), steel, 0, 0.05, 0.02);
+    body.add(shelf);
+    const glow = mesh(new THREE.PlaneGeometry(W - 0.5, 0.06), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffc070, emissiveIntensity: 6 }), 0, H / 2 - wall - 0.04, D / 2 - 0.3);
+    glow.rotation.x = Math.PI / 2;
+    body.add(glow);
+    // gold coin stacks on both shelves, and a few bars
+    const swarm = swarmCoinGeo();
+    const flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+    const m4 = new THREE.Matrix4();
+    const stacks = [
+      [-0.62, 0.08, -0.25, 9], [-0.3, 0.08, -0.1, 12], [0.05, 0.08, -0.3, 7], [0.4, 0.08, -0.15, 10], [0.7, 0.08, -0.35, 6],
+      [-0.6, -0.84, -0.2, 8], [-0.2, -0.84, -0.3, 11], [0.25, -0.84, -0.15, 9], [0.65, -0.84, -0.3, 12],
+    ];
+    const total = stacks.reduce((n, st) => n + st[3], 0);
+    const stackMesh = new THREE.InstancedMesh(swarm, gold, total);
+    let k = 0;
+    for (const [x, y, z, n] of stacks) {
+      for (let i = 0; i < n; i++) {
+        m4.compose(new THREE.Vector3(x + Math.sin(k * 3.1) * 0.012, y + 0.03 + i * 0.05, z + Math.cos(k * 2.3) * 0.012), flat, new THREE.Vector3(0.16, 0.16, 0.24));
+        stackMesh.setMatrixAt(k++, m4);
+      }
+    }
+    body.add(stackMesh);
+    const bar = new THREE.ExtrudeGeometry(shapeFrom([[-0.22, 0], [0.22, 0], [0.18, 0.1], [-0.18, 0.1]]), { depth: 0.12, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2 });
+    [[-0.1, 0.08, 0.32], [0.38, 0.08, 0.3], [0.13, 0.18, 0.31]].forEach(([x, y, z], i) => {
+      const b = mesh(bar, gold, x, y, z - 0.06);
+      b.rotation.y = i * 0.2 - 0.1;
+      body.add(b);
+    });
+    root.add(body);
+    // the door, swung open on its left hinge
+    const hinge = G();
+    hinge.position.set(-W / 2, 0, D / 2);
+    const door = G();
+    door.add(mesh(roundBox(W - 0.06, H - 0.06, 0.2, 0.07, 4), shell, (W - 0.06) / 2, 0, 0.1));
+    door.add(mesh(roundBox(W - 0.5, H - 0.5, 0.06, 0.025, 3), M.metal(0x34353c, 0.3), (W - 0.06) / 2, 0, 0.21));
+    const dial = mesh(cyl(0.26, 0.28, 0.08, 64), gold, W / 2 - 0.25, 0.25, 0.25);
+    dial.rotation.x = Math.PI / 2;
+    const dialFace = mesh(new THREE.CircleGeometry(0.22, 64), new THREE.MeshStandardMaterial({ map: dialTex({ nums: true }), metalness: 0.4, roughness: 0.35 }), W / 2 - 0.25, 0.25, 0.292);
+    door.add(dial, dialFace);
+    const wheel = G();
+    wheel.position.set(W / 2 + 0.05, -0.38, 0.27);
+    wheel.add(mesh(new THREE.TorusGeometry(0.22, 0.03, 16, 48), steel));
+    for (let i = 0; i < 3; i++) {
+      const sp = mesh(cyl(0.02, 0.02, 0.44, 12), steel);
+      sp.rotation.z = (i / 3) * Math.PI;
+      wheel.add(sp);
+    }
+    door.add(wheel);
+    const bolts = new THREE.InstancedMesh(cyl(0.05, 0.05, 0.3, 24), steel, 6);
+    const qz = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+    [-0.6, 0, 0.6].forEach((y, i) => {
+      m4.compose(new THREE.Vector3(W - 0.03, y, 0.1), qz, new THREE.Vector3(1, 1, 1));
+      bolts.setMatrixAt(i, m4);
+      m4.compose(new THREE.Vector3(W / 2, y < 0 ? -H / 2 + 0.02 : H / 2 - 0.02, 0.1), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1));
+      bolts.setMatrixAt(i + 3, m4);
+    });
+    door.add(bolts);
+    hinge.add(door);
+    hinge.rotation.y = -1.95;
+    root.add(hinge);
+    // coins spilling out onto the floor
+    const spill = [];
+    for (let i = 0; i < 22; i++) {
+      const c = zatsCoin('lo');
+      const r = 0.25 + Math.pow(i / 22, 0.8) * 1.6;
+      const a = -0.6 + Math.sin(i * 2.7) * 1.1;
+      c.scale.setScalar(0.2);
+      c.position.set(Math.sin(a) * r + 0.1, -H / 2 + 0.03 + (i % 5 === 0 ? 0.04 : 0), D / 2 + Math.cos(a) * r * 0.8);
+      c.rotation.set(-Math.PI / 2 + Math.sin(i * 5.1) * 0.35, Math.sin(i * 1.3) * 0.3, i * 0.9);
+      spill.push(c);
+    }
+    // a couple leaning against the pile, one rolling
+    const lean = zatsCoin('hi');
+    lean.scale.setScalar(0.34);
+    lean.position.set(0.85, -H / 2 + 0.3, D / 2 + 0.75);
+    lean.rotation.set(-0.35, -0.55, 0.05);
+    const sol = solCoin('hi');
+    sol.scale.setScalar(0.3);
+    sol.position.set(-0.55, -H / 2 + 0.27, D / 2 + 1.0);
+    sol.rotation.set(-0.3, 0.45, -0.08);
+    root.add(...spill, lean, sol);
+    root.position.set(0.55, 0.15, 0);
+    return {
+      root,
+      sway: 0,
+      view: { el: 0.28, az: 0.42, dist: 9.6, fov: 30, y: -0.15 },
+      tick() {},
+    };
+  },
+
+  // One holder: a single person icon for the Live page.
+  person() {
+    const root = G();
+    const mat = new THREE.MeshPhysicalMaterial({ color: COL.people, roughness: 0.32, metalness: 0.05, clearcoat: 0.8, clearcoatRoughness: 0.2 });
+    const b = bust(mat);
+    b.scale.setScalar(1.9);
+    b.position.y = -0.2;
+    const base = mesh(cyl(0.62, 0.68, 0.08, 64), M.metal(0x4a4560, 0.3), 0, -0.86, 0);
+    const ring = mesh(new THREE.TorusGeometry(0.66, 0.03, 12, 64), M.glow(COL.people, 0.8), 0, -0.82, 0);
+    ring.rotation.x = Math.PI / 2;
+    root.add(b, base, ring);
+    return { root, sway: 0.2, view: { el: 0.2, dist: 4.4, y: -0.05 }, tick() {} };
+  },
+
+  // The fire bowl without its flame (the page animates the fire).
+  brazier() {
+    const o = B.burn();
+    const kids = o.root.children;
+    o.root.remove(kids[6]);
+    o.root.remove(kids[5]);
+    o.root.position.y = 0.3;
+    return { ...o, sway: 0, view: { el: 0.3, dist: 4.0, y: -0.25 }, tick() {} };
+  },
+
+  // Plain coins, used as the small flying coins on the page scenes.
+  coinzats() {
+    const root = G();
+    const c = zatsCoin('hi');
+    root.add(c);
+    return { root, sway: 0, view: { el: 0.1, az: 0, dist: 3.1 }, tick() { c.rotation.set(0.15, 0.5, -0.1); } };
+  },
+  coinsol() {
+    const root = G();
+    const c = solCoin('hi');
+    root.add(c);
+    return { root, sway: 0, view: { el: 0.1, az: 0, dist: 3.1 }, tick() { c.rotation.set(0.15, 0.5, -0.1); } };
   },
 
   // ---------------------------------------------------------------- home: start
@@ -375,59 +529,48 @@ const B = {
     };
   },
 
-  // A $ZATS coin sinking into a flame and leaving embers.
+  // A $ZATS coin dropping into a cast-iron brazier full of fire.
   burn() {
     const root = G();
-    const coin = zatsCoin('lo');
-    coin.scale.setScalar(0.5);
-    const flameGeo = (() => {
-      const pts = [];
-      for (let i = 0; i <= 16; i++) {
-        const v = i / 16;
-        pts.push(new THREE.Vector2(Math.sin(v * Math.PI) * (1 - v) ** 0.6 * 0.5 + 0.0001, v * 1.6 - 0.2));
-      }
-      return new THREE.LatheGeometry(pts, 32);
-    })();
-    const flames = [
-      [1, 0xff4a1c, 0.55],
-      [0.72, 0xff9a3c, 0.6],
-      [0.45, 0xffe08a, 0.75],
-    ].map(([s, c, o]) => {
-      const m = mesh(flameGeo, M.add(c, o), 0, -0.6, 0);
-      m.scale.setScalar(s);
-      return m;
-    });
-    const pit = mesh(cyl(0.55, 0.62, 0.14, 48), M.metal(0x2a201a, 0.5), 0, -0.68, 0);
-    const pitRim = mesh(new THREE.TorusGeometry(0.56, 0.035, 12, 48), M.metal(0x4a3a2a, 0.35), 0, -0.6, 0);
-    pitRim.rotation.x = Math.PI / 2;
-    const embers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.03, 8, 6), M.add(0xffb060, 1), 18);
-    const glow = glowSprite(COL.burn, 2.2, 0.55);
-    glow.position.y = -0.2;
-    const tmp = new THREE.Matrix4();
-    root.add(pit, pitRim, glow, ...flames, coin, embers);
+    const iron = new THREE.MeshPhysicalMaterial({ color: 0x2b2c31, metalness: 0.75, roughness: 0.42, clearcoat: 0.3 });
+    const bowlProf = [
+      [0.001, -0.62],
+      [0.3, -0.62],
+      [0.5, -0.56],
+      [0.66, -0.4],
+      [0.74, -0.2],
+      [0.76, -0.12],
+      [0.7, -0.12],
+      [0.62, -0.3],
+      [0.001, -0.36],
+    ].map(([x, y]) => new THREE.Vector2(x, y));
+    const bowl = mesh(new THREE.LatheGeometry(bowlProf, 96), iron);
+    const lip = mesh(new THREE.TorusGeometry(0.735, 0.035, 16, 96), M.metal(0xb08a4a, 0.3), 0, -0.12, 0);
+    lip.rotation.x = Math.PI / 2;
+    const stand = mesh(cyl(0.22, 0.34, 0.16, 48), iron, 0, -0.72, 0);
+    const foot = mesh(cyl(0.42, 0.44, 0.05, 48), M.metal(0x3a3b40, 0.35), 0, -0.82, 0);
+    const coals = new THREE.Group();
+    for (let i = 0; i < 14; i++) {
+      const a = i * 2.4;
+      const r = 0.15 + (i % 4) * 0.12;
+      const c = mesh(new THREE.DodecahedronGeometry(0.09 + (i % 3) * 0.02, 0), new THREE.MeshPhysicalMaterial({ color: 0x1a1210, emissive: i % 3 ? 0xff5a1a : 0xffa040, emissiveIntensity: i % 3 ? 0.6 : 1.4, roughness: 0.8 }), Math.cos(a) * r, -0.3, Math.sin(a) * r);
+      c.rotation.set(i, i * 2, i * 3);
+      coals.add(c);
+    }
+    const fire = iconFlame(0.95);
+    fire.position.y = -0.32;
+    const coin = zatsCoin('hi');
+    coin.scale.setScalar(0.34);
+    coin.position.set(0.06, 0.62, 0.1);
+    coin.rotation.set(0.2, -0.5, 0.35);
+    root.add(bowl, lip, stand, foot, coals, fire, coin);
     return {
       root,
-      sway: 0.2,
-      view: { el: 0.22, dist: 4.4, y: 0.05 },
+      sway: 0.15,
+      view: { el: 0.24, dist: 4.4, y: -0.02 },
       tick(t) {
-        const k = cycle(t, 3);
-        coin.position.y = 1.0 - ease(k) * 1.5;
-        coin.rotation.y = t * 2;
-        coin.scale.setScalar(0.5 * Math.max(0.001, 1 - clamp01((k - 0.55) / 0.4)));
-        flames.forEach((f, i) => {
-          const s = [1, 0.72, 0.45][i];
-          f.scale.set(s * (1 + Math.sin(t * 9 + i) * 0.05), s * (1 + Math.sin(t * 7 + i * 2) * 0.1 + (k > 0.55 ? 0.2 : 0)), s);
-          f.rotation.y = t * (i + 1);
-        });
-        for (let i = 0; i < 18; i++) {
-          const e = cycle(t * 0.9, 1, i / 18);
-          const a = i * 2.4;
-          tmp.makeTranslation(Math.cos(a) * (0.15 + e * 0.3) + Math.sin(t * 3 + i) * 0.05, -0.3 + e * 1.6, Math.sin(a) * (0.15 + e * 0.3));
-          tmp.scale(new THREE.Vector3(1 - e, 1 - e, 1 - e));
-          embers.setMatrixAt(i, tmp);
-        }
-        embers.instanceMatrix.needsUpdate = true;
-        glow.material.opacity = 0.45 + Math.sin(t * 8) * 0.06;
+        coin.position.y = 0.62 + Math.sin(t * 1.4) * 0.05;
+        fire.scale.y = 1 + Math.sin(t * 6) * 0.04;
       },
     };
   },
@@ -522,73 +665,77 @@ const B = {
   },
 
   // ---------------------------------------------------------------- burn card
-  // An industrial furnace: coins slide down the chute into the fire.
+  // A cast-iron stove with its door open: coins go in, fire comes out.
   furnace() {
     const root = G();
-    const brick = M.paint(0x3a2218, 0.6);
-    const body = mesh(roundBox(1.3, 1.1, 1.0, 0.12, 5), brick, 0, -0.2, 0);
-    const dome = mesh(new THREE.SphereGeometry(0.65, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2), brick, 0, 0.32, 0);
-    dome.scale.set(1, 0.5, 0.78);
-    const chimney = mesh(cyl(0.12, 0.14, 0.7, 32), M.metal(0x35302c, 0.4), 0.3, 0.7, -0.1);
-    const chimCap = mesh(cyl(0.17, 0.17, 0.06, 32), M.metal(0x4a4440, 0.35), 0.3, 1.06, -0.1);
-    const mouthFrame = mesh(roundBox(0.72, 0.5, 0.06, 0.05, 3), M.metal(0x1d1a18, 0.35), 0, -0.3, 0.5);
-    const fireTex = canvasTex(256, (g, w) => {
-      const gr = g.createRadialGradient(w / 2, w * 0.8, 4, w / 2, w * 0.7, w * 0.7);
-      gr.addColorStop(0, '#fff3c0');
-      gr.addColorStop(0.25, '#ffb04a');
-      gr.addColorStop(0.6, '#ff4a1c');
-      gr.addColorStop(1, '#3a0a04');
-      g.fillStyle = gr;
-      g.fillRect(0, 0, w, w);
+    const iron = new THREE.MeshPhysicalMaterial({ color: 0x2a2b30, metalness: 0.7, roughness: 0.4, clearcoat: 0.35, clearcoatRoughness: 0.3 });
+    const brass = M.metal(0xb88f4c, 0.28);
+    // pot-belly body
+    const prof = [];
+    for (let i = 0; i <= 28; i++) {
+      const v = i / 28;
+      const y = -0.55 + v * 1.25;
+      const r = 0.5 + Math.sin(v * Math.PI) * 0.17 - (v > 0.85 ? (v - 0.85) * 1.6 : 0);
+      prof.push(new THREE.Vector2(r, y));
+    }
+    prof.unshift(new THREE.Vector2(0.001, -0.55));
+    prof.push(new THREE.Vector2(0.001, 0.7));
+    const body = mesh(new THREE.LatheGeometry(prof, 96), iron);
+    const bands = [-0.42, 0.55].map((y) => {
+      const b = mesh(new THREE.TorusGeometry(y < 0 ? 0.53 : 0.47, 0.03, 16, 96), brass, 0, y, 0);
+      b.rotation.x = Math.PI / 2;
+      return b;
     });
-    const fire = mesh(new THREE.PlaneGeometry(0.6, 0.4), new THREE.MeshBasicMaterial({ map: fireTex }), 0, -0.3, 0.535);
-    const grate = [-0.2, -0.07, 0.07, 0.2].map((x) => mesh(cyl(0.015, 0.015, 0.4, 8), M.metal(0x111111, 0.4), x, -0.3, 0.55));
-    const chute = mesh(roundBox(0.3, 0.04, 0.9, 0.02, 2), M.metal(0x7a7f8a, 0.3), -0.0, 0.18, 0.95);
-    chute.rotation.x = 0.55;
-    const coins = [0, 1, 2].map((i) => {
-      const c = zatsCoin('lo');
-      c.scale.setScalar(0.17);
-      c.userData.o = i / 3;
+    const top = mesh(cyl(0.36, 0.42, 0.1, 64), iron, 0, 0.74, 0);
+    const finial = mesh(new THREE.SphereGeometry(0.06, 24, 16), brass, -0.15, 0.82, 0.1);
+    // chimney with an elbow
+    const pipe = mesh(cyl(0.12, 0.12, 0.42, 40), iron, 0.12, 0.98, -0.08);
+    const collar = mesh(cyl(0.15, 0.15, 0.06, 40), brass, 0.12, 0.82, -0.08);
+    // legs
+    const legs = [0, 1, 2].map((i) => {
+      const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
+      const l = mesh(cyl(0.05, 0.035, 0.28, 16), iron, Math.cos(a) * 0.34, -0.66, Math.sin(a) * 0.34);
+      l.rotation.set(Math.sin(a) * 0.25, 0, -Math.cos(a) * 0.25);
+      return l;
+    });
+    // the open door: a recessed glowing mouth, the door swung aside
+    const mouth = G();
+    mouth.position.set(0, -0.08, 0.6);
+    const frame = mesh(new THREE.TorusGeometry(0.24, 0.035, 16, 64), brass);
+    const glowDisc = mesh(new THREE.CircleGeometry(0.235, 64), new THREE.MeshPhysicalMaterial({ color: 0x220800, emissive: 0xff6a1a, emissiveIntensity: 1.3, roughness: 1 }), 0, 0, -0.03);
+    const fire = iconFlame(0.36);
+    fire.position.set(0, -0.2, -0.02);
+    mouth.add(glowDisc, fire, frame);
+    mouth.lookAt(0, -0.08, 3);
+    const hinge = G();
+    hinge.position.set(0.25, -0.08, 0.58);
+    const door = mesh(cyl(0.25, 0.25, 0.04, 64), iron, 0.25, 0, 0);
+    door.rotation.x = Math.PI / 2;
+    const knob = mesh(new THREE.SphereGeometry(0.035, 16, 12), brass, 0.42, 0, 0.04);
+    const grille = [-0.08, 0, 0.08].map((y) => mesh(roundBox(0.24, 0.025, 0.02, 0.01, 2), brass, 0.25, y, 0.03));
+    hinge.add(door, knob, ...grille);
+    hinge.rotation.y = -1.25;
+    const rivets = new THREE.Group();
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2;
+      rivets.add(mesh(new THREE.SphereGeometry(0.018, 12, 8), brass, Math.cos(a) * 0.53, -0.36, Math.sin(a) * 0.53));
+    }
+    // coins on their way in
+    const coins = [0, 1].map((i) => {
+      const c = zatsCoin('hi');
+      c.scale.setScalar(0.15);
+      c.position.set(-0.5 + i * 0.2, 0.3 - i * 0.14, 0.95 - i * 0.12);
+      c.rotation.set(0.3, 0.5 - i * 0.3, 0.2);
       return c;
     });
-    const light = new THREE.PointLight(0xff7a30, 3, 3);
-    light.position.set(0, -0.2, 1.1);
-    const sparks = new THREE.InstancedMesh(new THREE.SphereGeometry(0.02, 6, 4), M.add(0xffc070, 1), 12);
-    const smoke = [0, 1, 2].map((i) => {
-      const s = glowSprite(0x6b6560, 0.4, 0.3);
-      s.material = s.material.clone();
-      s.material.blending = THREE.NormalBlending;
-      s.userData.o = i / 3;
-      return s;
-    });
-    const m4 = new THREE.Matrix4();
-    root.add(body, dome, chimney, chimCap, mouthFrame, fire, ...grate, chute, ...coins, light, sparks, ...smoke, shadow(1.1, 0.5, -0.76));
-    root.scale.setScalar(0.92);
+    root.add(body, ...bands, top, finial, pipe, collar, ...legs, mouth, hinge, rivets, ...coins);
+    root.scale.setScalar(0.95);
     return {
       root,
-      view: { el: 0.28, dist: 4.6, az: -0.55, y: 0.1 },
+      sway: 0.12,
+      view: { el: 0.2, dist: 5.3, az: -0.35, y: 0.22 },
       tick(t) {
-        coins.forEach((c) => {
-          const k = cycle(t, 3, c.userData.o * 3);
-          c.position.set(0, 0.55 - k * 0.75, 1.35 - k * 0.85);
-          c.rotation.x = -0.55;
-          c.visible = k < 0.92;
-        });
-        light.intensity = 2.6 + Math.sin(t * 13) * 0.5 + Math.sin(t * 7) * 0.4;
-        fire.material.color.setScalar(0.85 + Math.sin(t * 11) * 0.15);
-        for (let i = 0; i < 12; i++) {
-          const e = cycle(t * 1.4, 1, i / 12);
-          m4.makeTranslation(Math.sin(i * 3.1) * 0.25, -0.3 + e * 0.6, 0.55 + e * 0.4);
-          m4.scale(new THREE.Vector3(1 - e, 1 - e, 1 - e));
-          sparks.setMatrixAt(i, m4);
-        }
-        sparks.instanceMatrix.needsUpdate = true;
-        smoke.forEach((s) => {
-          const e = cycle(t * 0.4, 1, s.userData.o);
-          s.position.set(0.3 + Math.sin(e * 5) * 0.05, 1.12 + e * 0.8, -0.1);
-          s.scale.setScalar(0.3 + e * 0.6);
-          s.material.opacity = 0.35 * (1 - e);
-        });
+        coins.forEach((c, i) => (c.position.y = 0.3 - i * 0.14 + Math.sin(t * 1.5 + i) * 0.03));
       },
     };
   },

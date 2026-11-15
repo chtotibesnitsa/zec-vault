@@ -1,18 +1,17 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import Terrain from './terrain.jsx';
 import { Ambient, detectLite, useDepth } from './glass.jsx';
 import { CoinDrop, FeeSplit, FriendsOrbit, HoldSafe, NameCard, SwapCubes, TokenCoin, ZCoin } from './obj3d.jsx';
-const Scene3D = lazy(() => import('./Scene3D.jsx'));
+import StillScene from './stills.jsx';
 import { brand, fill } from './brand.js';
-import { api, fmtNum, fmtUsd, short, solscanAcct, solscanTx, ago, useFeed, usePoll } from './api.js';
-import { AsciiField, CopyChip, Countdown, Counter, Emblem, eventText, FeedTable, Marquee, Reveal, Scramble, Toasts, txLink, WalletLink, Win, Wordmark } from './components.jsx';
+import { api, fmtNum, fmtUsd, solscanAcct, solscanTx, ago, useFeed, usePoll } from './api.js';
+import { CopyChip, Countdown, Counter, eventText, FeedTable, Marquee, Reveal, Toasts, txLink, WalletLink, Win, Wordmark } from './components.jsx';
 import { Px } from './pixel.jsx';
-import { FloatingProof, PayoutPulse, UsageStrip } from './proof.jsx';
-import { SAMPLE_STATS, useSampleFeed } from './sample.js';
+import { UsageStrip } from './proof.jsx';
 import { BurnTracker, FlowStory, Hero5, HoldCheck, LiveBoard, ProofBar, SwapSection } from './landing.jsx';
 import { AccountButton, AuthProvider, InviteCopy, inviteLink, shareOnX, useAuth } from './auth.jsx';
 import { Link, KIND_ICON, KIND_TONE } from './nav.jsx';
 
-const Hero3D = lazy(() => import('./Hero3D.jsx'));
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // Client-side routes with a pixel-dissolve wipe between pages.
@@ -107,13 +106,9 @@ export default function App() {
   }, []);
   const realEvents = useFeed(pushToast);
   const cfg = stats.data?.config || null;
-  // Before launch the page runs on clearly labelled sample activity.
-  const preview = !realEvents.length && !cfg?.live;
-  const sampleTick = useRef(0);
-  const sampleEvents = useSampleFeed(preview, (e) => {
-    if (sampleTick.current++ % 3 === 2) pushToast(e);
-  });
-  const events = realEvents.length ? realEvents : sampleEvents;
+  // Only real on-chain activity is ever shown; before launch the feeds are empty.
+  const preview = false;
+  const events = realEvents;
   const page = pageOf(path);
   const isApp = page === 'app';
   useSpotlight();
@@ -147,7 +142,7 @@ export default function App() {
     <div className={`site v-${brand.key}`} style={{ "--n": brand.name.length }}>
       <div className="bg-grid" aria-hidden="true" />
       <Ambient page={page} />
-      <StatusBar stats={stats.data} />
+      <Terrain />
       <Nav page={page} cfg={cfg} />
       <div className="page" key={page}>
         {page === 'admin' ? (
@@ -156,7 +151,7 @@ export default function App() {
           <VaultApp stats={stats} events={events} cfg={cfg} />
         ) : page === 'swap' ? (
           <main>
-            <SceneBand kind="exchange" tone="trade" title={`SOL in, $${brand.ticker} out`} sub="Routed by Jupiter, signed in your wallet. We add 0%." legend={[['#9b5cff', 'SOL'], ['var(--c-trade)', '0% from us'], ['var(--c-pay)', `$${brand.ticker}`]]} />
+            <SceneBand kind="exchange" tone="trade" title={<><span className="w-people">SOL</span> in, <span className="w-pay">${brand.ticker}</span> out</>} sub="Routed by Jupiter, signed in your wallet. We add 0%." legend={[['#9f8ee6', 'SOL'], ['var(--c-trade)', '0% from us'], ['var(--c-pay)', `$${brand.ticker}`]]} />
             <SwapSection cfg={cfg} />
             <Reveal>
               <Buy cfg={cfg} />
@@ -178,37 +173,6 @@ export default function App() {
       {notice && <div className="notice pixel">{notice}</div>}
     </div>
     </AuthProvider>
-  );
-}
-
-function useClock() {
-  const [t, setT] = useState(() => new Date());
-  useEffect(() => {
-    const iv = setInterval(() => setT(new Date()), 1000);
-    return () => clearInterval(iv);
-  }, []);
-  return t;
-}
-
-// Thin system bar. Every value on it is real: vault state, payout timer, UTC clock.
-function StatusBar({ stats }) {
-  const now = useClock();
-  const live = stats?.config?.live;
-  const paused = stats?.config?.paused;
-  const state = !brand.apiUrl ? 'pre-launch' : !stats ? 'connecting' : paused ? 'paused' : live ? 'online' : 'pre-launch';
-  return (
-    <div className="statusbar pixel">
-      <span>
-        <span className={`led ${state === 'online' ? 'on' : ''}`} /> vault {state}
-      </span>
-      <span className="hide-sm">no kyc · no custody · no sign-up</span>
-      <span className="hide-sm">
-        next payout {live ? <Countdown to={stats?.nextCycleAt} /> : '--:--'}
-      </span>
-      <span>
-        {now.toISOString().slice(11, 19)} utc
-      </span>
-    </div>
   );
 }
 
@@ -321,34 +285,6 @@ function SectionHead({ title, right, icon = 'bolt', tone = 'pay' }) {
   );
 }
 
-function HeroViewport() {
-  const [ok, setOk] = useState(true);
-  useEffect(() => {
-    try {
-      const c = document.createElement('canvas');
-      if (!(c.getContext('webgl2') || c.getContext('webgl'))) setOk(false);
-    } catch {
-      setOk(false);
-    }
-  }, []);
-  return (
-    <div className="viewport">
-      <span className="vp-corner tl" />
-      <span className="vp-corner tr" />
-      <span className="vp-corner bl" />
-      <span className="vp-corner br" />
-      {ok ? (
-        <Suspense fallback={<Emblem kind={brand.emblem} />}>
-          <Hero3D kind={brand.emblem} accent={brand.accent} accent2={brand.accent2} dist={brand.key === 'zec' ? 6.6 : 8.2} />
-        </Suspense>
-      ) : (
-        <Emblem kind={brand.emblem} />
-      )}
-      <div className="vp-scan" aria-hidden="true" />
-    </div>
-  );
-}
-
 function FeeBlocks({ pct }) {
   const n = 40;
   const on = Math.round((pct / 100) * n);
@@ -361,9 +297,9 @@ function FeeBlocks({ pct }) {
   );
 }
 
-// Sample numbers before launch, real numbers after.
-function proofOf(s, preview) {
-  return preview ? { ...SAMPLE_STATS, ...(s || {}), community: SAMPLE_STATS.community, holders: SAMPLE_STATS.holders, burned: SAMPLE_STATS.burned, burnSol: SAMPLE_STATS.burnSol, rewardsPaid: SAMPLE_STATS.rewardsPaid, trades24h: SAMPLE_STATS.trades24h } : s;
+// Real numbers only.
+function proofOf(s) {
+  return s;
 }
 
 // Big title at the top of each inner page.
@@ -382,28 +318,6 @@ function PageHead({ icon, tone, eyebrow, title, sub }) {
   );
 }
 
-// Explains the colors once, so every number on the site reads at a glance.
-const KEY = [
-  ['pay', 'coins', 'Paid to holders'],
-  ['burn', 'flame', 'Burned'],
-  ['vault', 'bolt', 'Fees and vault'],
-  ['trade', 'swap', 'Buys and swaps'],
-  ['people', 'users', 'Holders and community'],
-];
-function ColorKey() {
-  return (
-    <div className="colorkey" aria-label="Color key">
-      <span className="ck-label pixel">color key</span>
-      {KEY.map(([t, ic, label]) => (
-        <span key={t} className={`key-item tone-${t}`}>
-          <Px name={ic} size={14} />
-          {label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 // Three plain steps on the home page; the full story lives on /how.
 function HomeHow({ cfg }) {
   const tones = ['trade', 'vault', 'pay'];
@@ -412,7 +326,7 @@ function HomeHow({ cfg }) {
     <section className="section homehow" id="how">
       <div className="s5-head">
         <span className="s5-eyebrow pixel">how it works</span>
-        <h2>Three steps, all automatic</h2>
+        <h2>Three steps, <span className="w-trade">all automatic</span></h2>
       </div>
       <div className="hm-steps">
         {brand.steps.map(([t, d], i) => (
@@ -445,7 +359,7 @@ function HomeLive({ events, cfg, preview }) {
         <span className="s5-eyebrow pixel">
           <span className="rec" /> {preview ? 'sample feed · real transactions replace it at launch' : 'live from solana'}
         </span>
-        <h2>Happening right now</h2>
+        <h2>Happening <span className="w-trade">right now</span></h2>
       </div>
       <Marquee events={events} cfg={cfg} />
       <div className="hl-list">
@@ -479,23 +393,14 @@ function Landing({ go, stats, events, cfg, preview }) {
   const proof = proofOf(s, preview);
   return (
     <main>
-      <Hero5
-        cfg={cfg}
-        s={proof}
-        preview={preview}
-        visual={<HeroViewport />}
-        overlay={
-          <>
-            <FloatingProof events={events} cfg={cfg} />
-            <PayoutPulse s={s} sample={preview} />
-          </>
-        }
-      />
+      <Hero5 cfg={cfg} s={{ ...proof, nextCycleAt: s?.nextCycleAt }} preview={preview} events={events} />
+      <div className="home-ticker">
+        <Marquee events={events} cfg={cfg} />
+      </div>
       <div className="h5-check" id="numbers">
         <HoldCheck cfg={cfg} preview={preview} />
       </div>
       <ProofBar s={proof} preview={preview} />
-      <ColorKey />
 
       <Reveal>
         <HomeHow cfg={cfg} />
@@ -510,9 +415,8 @@ function Landing({ go, stats, events, cfg, preview }) {
       </Reveal>
 
       <section className="closer">
-        <AsciiField className="closer-field" />
         <div className="closer-in">
-          <Scramble as="h2" text={brand.closer} className="closer-h" />
+          <h2 className="closer-h">{brand.closer}</h2>
           <div className="hero-cta center">
             <a href="/app" className="btn" onClick={(e) => (e.preventDefault(), go('/app'))}>
               Open the vault
@@ -530,11 +434,9 @@ function Landing({ go, stats, events, cfg, preview }) {
 // A wide glass frame holding the page's WebGL scene, with a plain caption.
 function SceneBand({ kind, tone, title, sub, legend, events }) {
   return (
-    <div className={`scene-band scene-${kind} tone-${tone}`}>
+    <div className={`scene-band scene-${kind} tone-${tone} ${kind === 'reactor' ? '' : 'scene-stacked'}`}>
       <div className="scene-frame">
-        <Suspense fallback={null}>
-          <Scene3D kind={kind} events={events} />
-        </Suspense>
+        <StillScene kind={kind} events={events} />
         <div className="scene-copy">
           <h1>{title}</h1>
           {sub && <p>{sub}</p>}
@@ -560,7 +462,7 @@ function LivePage({ events, cfg, preview, proof }) {
         kind="reactor"
         tone="trade"
         events={events}
-        title="The vault, live"
+        title={<>The vault, <span className="w-trade">live</span></>}
         sub="Every trade, payout and burn on this page moves through the vault below."
         legend={[
           ['var(--c-trade)', 'buys flying in'],
@@ -571,7 +473,6 @@ function LivePage({ events, cfg, preview, proof }) {
         ]}
       />
       <LiveBoard events={events} cfg={cfg} preview={preview} ticker={<Marquee events={events} cfg={cfg} />} />
-      <ColorKey />
       <Reveal>
         <BurnTracker s={proof} events={events} cfg={cfg} preview={preview} />
       </Reveal>
@@ -601,7 +502,7 @@ function HowPage({ cfg, proof }) {
 
       <Reveal>
         <section className="section" id="token">
-          <SectionHead icon="coins" tone="pay" title="The token" />
+          <SectionHead icon="coins" tone="pay" title={<>The <span className="w-pay">token</span></>} />
           <div className="spec-wrap">
           <dl className="spec card">
             <Row k="ticker" v={`$${brand.ticker}`} />
@@ -612,14 +513,14 @@ function HowPage({ cfg, proof }) {
             <Row k="contract" v={cfg?.tokenMint ? <a className="mono" href={solscanAcct(cfg.tokenMint)} target="_blank" rel="noreferrer">{cfg.tokenMint}</a> : 'revealed at launch'} />
             <Row k="vault wallet" v={cfg?.treasury ? <a className="mono" href={solscanAcct(cfg.treasury)} target="_blank" rel="noreferrer">{cfg.treasury}</a> : 'revealed at launch'} />
           </dl>
-          <TokenCoin ticker={brand.ticker} />
+          <TokenCoin ticker={brand.ticker} share={(cfg?.rewardShareBps ?? 8000) / 100} burn={(cfg?.burnBps ?? 1000) / 100} />
           </div>
         </section>
       </Reveal>
 
       <Reveal>
         <section className="section" id="faq">
-          <SectionHead icon="eye" tone="people" title="FAQ" />
+          <SectionHead icon="eye" tone="people" title={<>Questions, <span className="w-vault">answered</span></>} />
           <div className="faq">
             {faq.map(([q, a, tone], i) => (
               <details key={i} className={`tone-${tone}`}>
@@ -641,11 +542,11 @@ function HowPage({ cfg, proof }) {
 function BoardsPage({ proof, preview }) {
   return (
     <main>
-      <SceneBand kind="podium" tone="people" title="Leaderboards" sub="Who has been paid the most, who has held the longest without selling, and who has invited the most holders." legend={[['#e7a92f', 'most paid'], ['#c0c6d2', 'second'], ['#c47a3f', 'third']]} />
+      <SceneBand kind="podium" tone="people" title={<>The <span className="w-pay">leader</span><span className="w-people">boards</span></>} sub="Who has been paid the most, who has held the longest without selling, and who has invited the most holders." legend={[['#e7a92f', 'most paid'], ['#c0c6d2', 'second'], ['#c47a3f', 'third']]} />
       <TopEarners />
       <Reveal>
         <section className="section" id="community">
-          <SectionHead icon="users" tone="people" title="Every feature, in use" right={<span className="pixel muted">{preview ? 'sample counts' : 'live counts'}</span>} />
+          <SectionHead icon="users" tone="people" title={<>Every feature, <span className="w-people">in use</span></>} right={<span className="pixel muted">{preview ? 'sample counts' : 'live counts'}</span>} />
           <UsageStrip s={proof} sample={preview} />
         </section>
       </Reveal>
@@ -719,7 +620,7 @@ function Starter({ go, cfg }) {
   const done = steps.filter((x) => x.done).length;
   return (
     <section className="section" id="start">
-      <SectionHead icon="bolt" tone="trade" title="Start in 30 seconds" right={<span className="pixel muted">{me ? `${done}/4 done` : 'no sign-up, no kyc'}</span>} />
+      <SectionHead icon="bolt" tone="trade" title={<>Start in <span className="w-trade">30 seconds</span></>} right={<span className="pixel muted">{me ? `${done}/4 done` : 'no sign-up, no kyc'}</span>} />
       <div className="starter">
         <div className="st-bar">
           <i style={{ width: `${(done / 4) * 100}%` }} />
@@ -789,21 +690,6 @@ function TopEarners() {
       value: `${r.recruits}`,
       note: 'holders invited',
     }));
-  const sampleMode = !cfgState.data?.live && !rows.length;
-  if (sampleMode) {
-    const names = ['night_owl', 'ghost_01', 'no_kyc', 'quiet_one', 'cipher', 'zero_trace', 'shade'];
-    rows = names.map((u, i) => ({
-      key: u,
-      n: tab === 'earners' ? 98000 / (i + 1.3) : tab === 'diamond hands' ? 60 - i * 7 : 24 - i * 3,
-      who: (
-        <span className="who">
-          @{u} {i % 2 === 0 && <span className="xbadge">𝕏</span>}
-        </span>
-      ),
-      value: tab === 'earners' ? fmtNum(98000 / (i + 1.3), 2) : tab === 'diamond hands' ? `${60 - i * 7} payouts` : `${24 - i * 3}`,
-      note: <span className="sample-tag pixel">sample</span>,
-    }));
-  }
   const empty = {
     earners: 'Fills in after the first payout.',
     'diamond hands': 'Wallets that keep getting paid without selling show up here.',
@@ -812,7 +698,7 @@ function TopEarners() {
   return (
     <section className="section tone-people" id="earners">
       
-      <Win title={`${brand.key}-vault — boards`} tabs={['earners', 'diamond hands', 'recruiters']} tab={tab} onTab={setTab}>
+      <Win title="Leaderboards" tabs={['earners', 'diamond hands', 'recruiters']} tab={tab} onTab={setTab}>
         {rows.length ? (
           <ol className="earners">
             {rows.map((r, i) => (
@@ -853,13 +739,13 @@ function VaultApp({ stats, events, cfg }) {
         <>
           <section className="section">
             <SectionHead icon="chart" tone="vault" title={"Overview"} right={<span className="muted small">{s?.config?.paused ? 'payouts paused' : s?.config?.live ? 'vault running' : 'opens at launch'}</span>} />
-            <Win title={`${brand.key}-vault — stats`}>
+            <Win title="Your stats">
               <StatsGrid s={s} />
             </Win>
           </section>
           <section className="section">
             <SectionHead icon="bolt" tone="vault" title={"Last vault actions"} />
-            <Win title={`${brand.key}-vault — actions`}>
+            <Win title="Actions">
               <FeedTable events={events.filter((e) => ['claim', 'buyback', 'payout'].includes(e.kind))} cfg={cfg} empty="The vault’s first claim, buyback and payout will show here." />
             </Win>
           </section>
@@ -1026,28 +912,67 @@ function Estimator({ stats: s, start }) {
 
 function Buy({ cfg }) {
   const mint = cfg?.tokenMint;
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (!mint) return;
+    navigator.clipboard?.writeText(mint).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  };
+  const venues = [
+    ['Pump.fun', 'Bonding curve or PumpSwap', mint && `https://pump.fun/coin/${mint}`, 'pay'],
+    ['Jupiter', 'Best route across Solana', mint && `https://jup.ag/swap/SOL-${mint}`, 'trade'],
+    ['DexScreener', 'Chart, pairs and volume', mint && `https://dexscreener.com/solana/${mint}`, 'vault'],
+  ];
+  const steps = [
+    ['Get a Solana wallet', 'Phantom, Solflare or Backpack. Free, takes a minute, and you keep the keys.', 'people'],
+    ['Add some SOL', 'Buy SOL on any exchange and send it to your wallet address.', 'vault'],
+    [`Swap for $${brand.ticker}`, 'Use the swap above at 0%, or any venue below.', 'trade'],
+    ['Just hold', `Your wallet is picked up in the next snapshot and paid every ${cfg?.cycleMinutes || 5} minutes.`, 'pay'],
+  ];
   return (
-    <section className="section">
-      <SectionHead icon="swap" tone="trade" title={`Buy $${brand.ticker}`} />
-      {mint ? (
-        <div className="buy-grid">
-          <a className="buy-card card" href={`https://pump.fun/coin/${mint}`} target="_blank" rel="noreferrer">
-            <b>Pump.fun</b>
-            <span>Bonding curve or PumpSwap</span>
+    <section className="section buy11">
+      <SectionHead icon="swap" tone="trade" title={<>How to buy <span className="w-pay">${brand.ticker}</span></>} />
+      <ol className="b11-steps">
+        {steps.map(([t, d, tone], i) => (
+          <li key={t} className={`b11-step tone-${tone}`} style={{ '--i': i }}>
+            <span className="b11-n mono">0{i + 1}</span>
+            <b>{t}</b>
+            <span>{d}</span>
+          </li>
+        ))}
+      </ol>
+      <div className={`b11-ca ${mint ? 'is-live' : ''}`}>
+        <span className="b11-ca-k pixel">contract</span>
+        <span className="b11-ca-v mono">{mint || 'Revealed here the minute it launches'}</span>
+        {mint ? (
+          <button className="btn btn-ghost b11-copy" onClick={copy}>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        ) : (
+          <a className="btn btn-ghost b11-copy" href={`https://x.com/${brand.xHandle}`} target="_blank" rel="noreferrer">
+            Follow @{brand.xHandle}
           </a>
-          <a className="buy-card card" href={`https://jup.ag/swap/SOL-${mint}`} target="_blank" rel="noreferrer">
-            <b>Jupiter</b>
-            <span>Best route across Solana</span>
-          </a>
-          <a className="buy-card card" href={`https://dexscreener.com/solana/${mint}`} target="_blank" rel="noreferrer">
-            <b>DexScreener</b>
-            <span>Chart and pairs</span>
-          </a>
-        </div>
-      ) : (
-        <div className="empty">The contract address goes live here at launch. Follow <a href={`https://x.com/${brand.xHandle}`}>@{brand.xHandle}</a> so you don’t miss it.</div>
-      )}
-      <p className="muted small">Then just hold. Your wallet is picked up in the next snapshot. {short(mint || '')}</p>
+        )}
+      </div>
+      <div className="b11-venues">
+        {venues.map(([name, sub, href, tone]) =>
+          href ? (
+            <a key={name} className={`b11-venue tone-${tone}`} href={href} target="_blank" rel="noreferrer">
+              <b>{name}</b>
+              <span>{sub}</span>
+              <i aria-hidden="true">↗</i>
+            </a>
+          ) : (
+            <div key={name} className={`b11-venue tone-${tone} is-off`}>
+              <b>{name}</b>
+              <span>{sub}</span>
+              <i className="pixel">at launch</i>
+            </div>
+          ),
+        )}
+      </div>
     </section>
   );
 }

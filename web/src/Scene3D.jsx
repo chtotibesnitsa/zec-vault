@@ -201,7 +201,7 @@ function arc(THREE, out, a, b, k, lift) {
 }
 
 // ---------------------------------------------------------------- Live
-function reactor(kit, minis, scene, camera, opts, ui) {
+export function reactor(kit, minis, scene, camera, opts, ui) {
   const { THREE, COL, M } = kit;
   const root = new THREE.Group();
   scene.add(root);
@@ -479,6 +479,24 @@ function reactor(kit, minis, scene, camera, opts, ui) {
   const base = { x: 0, y: 5.2, z: 10.2 };
   const look = new THREE.Vector3(0.2, 1.25, 0);
   return {
+    root,
+    // named points (world space) for pages that overlay a still render
+    anchors() {
+      root.updateMatrixWorld(true);
+      const w = (v) => v.clone().applyMatrix4(root.matrixWorld);
+      const out = {
+        trades: w(P.market.clone().setY(1.85)),
+        vault: w(new THREE.Vector3(0, 2.3, 0)),
+        holders: w(P.holders.clone().add(new THREE.Vector3(-0.3, 0.95, -0.4))),
+        burn: w(P.furnace.clone().add(new THREE.Vector3(0.3, 2.6, 0))),
+        marketOut: w(marketOut),
+        vaultIn: w(vaultIn),
+        vaultOut: w(vaultOut),
+        furnIn: w(furnIn),
+      };
+      holders.forEach((h, i) => (out['h' + i] = w(h.pos)));
+      return out;
+    },
     labelsMove: true,
     event(e) {
       quiet = 0;
@@ -542,7 +560,7 @@ function reactor(kit, minis, scene, camera, opts, ui) {
 }
 
 // ---------------------------------------------------------------- Swap
-function exchange(kit, minis, scene, camera, opts) {
+export function exchange(kit, minis, scene, camera, opts) {
   const { THREE, COL, M } = kit;
   const root = new THREE.Group();
   scene.add(root);
@@ -606,6 +624,8 @@ function exchange(kit, minis, scene, camera, opts) {
 
   let camZ = 8.4;
   return {
+    root,
+    anchors: () => ({ sol: sol.position.clone(), gate: new THREE.Vector3(), zats: zats.position.clone() }),
     fit(aspect) {
       camZ = aspect < 0.9 ? 15 : aspect < 1.3 ? 11 : 8.4;
     },
@@ -644,7 +664,7 @@ function exchange(kit, minis, scene, camera, opts) {
 }
 
 // ---------------------------------------------------------------- How
-function split(kit, minis, scene, camera, opts) {
+export function split(kit, minis, scene, camera, opts) {
   const { THREE, COL, M } = kit;
   const root = new THREE.Group();
   scene.add(root);
@@ -761,7 +781,7 @@ function split(kit, minis, scene, camera, opts) {
 }
 
 // ---------------------------------------------------------------- Boards
-function podium(kit, minis, scene, camera, opts) {
+export function podium(kit, minis, scene, camera, opts) {
   const { THREE, M } = kit;
   const root = new THREE.Group();
   scene.add(root);

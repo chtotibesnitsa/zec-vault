@@ -254,7 +254,7 @@ const Flood = {
                 return (
                   <div key={k} className={`lrow move k-${kind}`} style={{ opacity: k === n - 1 ? seg(lp % (B / 2), 0, 0.06) : 1 }}>
                     <span className={`mv-ic k-${kind === 'paid' ? 'payout' : kind}`}>
-                      <Px name={kind === 'burn' ? 'flame' : kind === 'paid' ? 'coins' : 'swap'} size={22} />
+                      <Px pixel name={kind === 'burn' ? 'flame' : kind === 'paid' ? 'coins' : 'swap'} size={22} />
                     </span>
                     <span className={`mv-tag pixel hy-k-${kind}`}>{kind.toUpperCase()}</span>
                     <span className="mv-text">
@@ -267,7 +267,7 @@ const Flood = {
           </div>
           <div className="hy-burn">
             <span className="pixel">
-              <Px name="flame" size={28} /> burned forever
+              <Px pixel name="flame" size={28} /> burned forever
             </span>
             <b className="mono" style={{ transform: `scale(${1 + 0.06 * pulse(lp)})` }}>{fmt(burned)}</b>
             <span className="mono">{tk}</span>

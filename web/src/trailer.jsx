@@ -372,7 +372,7 @@ const FeaturesScene = {
                   <div className="wallet-list">
                     {wallets.map((w, i) => (
                       <div key={w} className={`wallet-btn ${i === 0 && q > 0.62 ? 'hot' : ''}`}>
-                        <Px name="wallet" size={22} />
+                        <Px pixel name="wallet" size={22} />
                         <span>{w}</span>
                         <span className="pixel muted">{i === 0 && q > 0.62 ? 'check wallet…' : 'sign in'}</span>
                       </div>
@@ -448,7 +448,7 @@ const StepsScene = {
               return (
                 <li key={i} className="step" style={{ opacity: a, transform: `translateY(${(1 - easeOut(a)) * 60}px)` }}>
                   <div className="step-art">
-                    <Px name={icons[i]} size={64} />
+                    <Px pixel name={icons[i]} size={64} />
                     <span className="pixel step-n">step 0{i + 1}</span>
                   </div>
                   <h3>{fill(ti, null)}</h3>
@@ -508,13 +508,13 @@ const EndScene = {
           </div>
           <ul className="hero-facts pixel tr-facts" style={{ opacity: seg(lp, 1.1, 1.4) }}>
             <li>
-              <Px name="lock" size={18} /> no custody
+              <Px pixel name="lock" size={18} /> no custody
             </li>
             <li>
-              <Px name="eye" size={18} /> no kyc
+              <Px pixel name="eye" size={18} /> no kyc
             </li>
             <li>
-              <Px name="clock" size={18} /> paid every 5 min
+              <Px pixel name="clock" size={18} /> paid every 5 min
             </li>
           </ul>
         </div>

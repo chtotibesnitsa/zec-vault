@@ -1,46 +1,37 @@
-// Small real-3D objects that sit inside the information boxes. Each one
-// shows what its box says, and none repeats. They are WebGL models (see
-// src/3d/minis.js) drawn by one shared renderer (src/3d/host.js), which is
-// loaded lazily so three.js stays out of the first paint.
-import { useEffect, useRef } from 'react';
-
-let lib = null;
-const load = () => (lib ||= Promise.all([import('./3d/host.js'), import('./3d/minis.js')]));
-
-function Obj({ kind, args, className = '', label }) {
-  const cv = useRef(null);
-  const key = args ? JSON.stringify(args) : '';
-  useEffect(() => {
-    let off = null;
-    let dead = false;
-    load()
-      .then(([host, minis]) => {
-        if (dead || !cv.current) return;
-        const build = minis.builders[kind];
-        return host.attach(cv.current, () => build(args)).then((o) => (dead ? o() : (off = o)));
-      })
-      .catch((e) => console.warn('3D object unavailable', e));
-    return () => {
-      dead = true;
-      off?.();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, key]);
+import { Coin } from './coin.jsx';
+// Small 3D objects that sit inside the information boxes. Each one shows
+// what its box says, and none repeats.
+// Each object is a path-traced render made by the dev render bench
+// (/render.html, see src/render/), shipped as a transparent WebP. No 3D
+// runs in the visitor's browser; a slow CSS float keeps them alive.
+function Obj({ kind, className = '', label }) {
   return (
-    <div className={`o3 ${className}`} aria-hidden={label ? undefined : 'true'} role={label ? 'img' : undefined} aria-label={label}>
-      <div className="o3-floor" />
-      <canvas ref={cv} className="o3-cv" />
+    <div className={`o3 float ${className}`} aria-hidden={label ? undefined : 'true'} role={label ? 'img' : undefined} aria-label={label}>
+      <img src={`/renders/${kind}.webp`} alt="" loading="lazy" decoding="async" draggable="false" />
     </div>
+  );
+}
+
+// A coin spinning: 24 path-traced frames in one strip, stepped by CSS.
+export function Spin({ kind = 'zats', className = '' }) {
+  return (
+    <span className={`spin ${className}`}>
+      <img src={`/renders/spin-${kind}.webp`} alt="" decoding="async" draggable="false" />
+    </span>
   );
 }
 
 // ---- home: how it works ----
 export const SwapCubes = () => <Obj kind="swap" className="o-swapcubes" />;
-export const FeeSplit = ({ share = 80, burn = 10 }) => <Obj kind="split" args={{ share, burn }} className="o-feesplit" />;
+export const FeeSplit = () => <Obj kind="split" className="o-feesplit" />;
 export const CoinDrop = () => <Obj kind="coindrop" className="o-coindrop" />;
 
 // ---- home: start in 30 seconds ----
-export const ZCoin = () => <Obj kind="zcoin" className="o-zcoin" />;
+export const ZCoin = () => (
+  <div className="o3 o-zcoin o-vcoin" aria-hidden="true">
+    <Coin kind="zats" size={88} spin />
+  </div>
+);
 export const HoldSafe = () => <Obj kind="safe" className="o-safe" />;
 export const NameCard = () => <Obj kind="namecard" className="o-namecard" />;
 export const FriendsOrbit = () => <Obj kind="friends" className="o-friends" />;
@@ -61,7 +52,51 @@ export const TimerRing = () => <Obj kind="timer" className="o-mini o-timer" />;
 export const ShieldGem = () => <Obj kind="shield" className="o-mini o-shield" />;
 
 // ---- how page: token spec ----
-export const TokenCoin = ({ ticker }) => <Obj kind="token" className="o-token" label={`$${ticker} token`} />;
+// How page: where every fee goes, as a chart that draws itself.
+export function TokenCoin({ ticker, share = 80, burn = 10 }) {
+  const ops = Math.max(0, 100 - share - burn);
+  const R = 70;
+  const C = 2 * Math.PI * R;
+  const parts = [
+    ['pay', share, 'to holders'],
+    ['burn', burn, 'bought and burned'],
+    ['vault', ops, 'runs the project'],
+  ];
+  let acc = 0;
+  return (
+    <div className="fee-donut" role="img" aria-label={`$${ticker}: ${share}% of fees to holders, ${burn}% burned, ${ops}% operations`}>
+      <svg viewBox="0 0 200 200">
+        <circle cx="100" cy="100" r={R} className="fd-track" />
+        {parts.map(([tone, pct], i) => {
+          const len = (pct / 100) * C;
+          const el = (
+            <circle
+              key={tone}
+              cx="100"
+              cy="100"
+              r={R}
+              className={`fd-arc tone-${tone}`}
+              style={{ '--len': len, '--gap': C - len, '--off': -acc + C * 0.25, '--i': i }}
+            />
+          );
+          acc += len;
+          return el;
+        })}
+      </svg>
+      <div className="fd-center">
+        <b>{share}%</b>
+        <span>of every fee goes back to holders</span>
+      </div>
+      <ul className="fd-legend">
+        {parts.map(([tone, pct, label]) => (
+          <li key={tone} className={`tone-${tone}`}>
+            <i /> <b>{pct}%</b> {label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // ---- boards ----
 export const MiniPodium = () => <Obj kind="podium" className="o-mini o-podium" />;
