@@ -24,8 +24,8 @@ body { background: transparent; }
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(40% 35% at 12% 18%, rgba(231, 169, 47, 0.06), transparent 70%),
-    radial-gradient(45% 40% at 88% 70%, rgba(150, 132, 230, 0.06), transparent 70%),
+    radial-gradient(40% 35% at 12% 18%, rgba(255, 255, 255, 0.035), transparent 70%),
+    radial-gradient(45% 40% at 88% 70%, rgba(255, 255, 255, 0.03), transparent 70%),
     radial-gradient(120% 80% at 50% 120%, rgba(0, 0, 0, 0.5), transparent 60%);
 }
 
@@ -158,3 +158,42 @@ a.b11-venue:hover { border-color: color-mix(in srgb, var(--tone) 50%, transparen
   .bc-empty { top: 360px !important; }
   .scene-stacked .scene-copy { top: 22px; }
 }
+
+/* ==========================================================================
+   Neutral palette: black and white with greys. Only the coin and the logo
+   keep their gold. Tones still differ by lightness so legends read.
+   ========================================================================== */
+:root, :root[data-vault='zec'] {
+  --c-pay: #f3f2ee !important;
+  --c-trade: #dcdcd8 !important;
+  --c-people: #c4c4c0 !important;
+  --c-vault: #aeafb2 !important;
+  --c-burn: #9a9b9e !important;
+  --c-sell: #7f8085 !important;
+  --accent: #f3f2ee !important;
+  --accent2: #c4c4c0 !important;
+  --accent-deep: #6b6b6b !important;
+  --accent-text: #f3f2ee !important;
+  --glow: transparent !important;
+}
+/* emphasized words: a quieter grey instead of a color */
+.w-pay, .w-trade, .w-vault, .w-people, .w-burn, .w-sell { color: #8e8f94 !important; background: none !important; -webkit-text-fill-color: currentColor; }
+/* the hero's colored light pools become one soft white light */
+.h10-bg .f1 { background: radial-gradient(closest-side, rgba(255, 255, 255, 0.06), transparent) !important; }
+.h10-bg .f2, .h10-bg .f3 { display: none; }
+/* leaderboard podium in greys */
+.r1 .bc-bar { background: linear-gradient(180deg, #ffffff, #d6d6d2 50%, #8e8e8a) !important; }
+.r2 .bc-bar { background: linear-gradient(180deg, #cfcfcb, #9a9a96 50%, #5e5e5b) !important; }
+.r3 .bc-bar { background: linear-gradient(180deg, #a6a6a2, #74746f 50%, #474744) !important; }
+.bc-bar { background: linear-gradient(180deg, #4a4a4d, #2a2a2d) !important; }
+.is-empty .r1 .bc-bar, .is-empty .r2 .bc-bar, .is-empty .r3 .bc-bar { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.22) !important; background: transparent !important; }
+.is-empty .bc-bar { background: transparent !important; }
+.r1 .bc-val, .r1 .bc-rank, .bc-lab.r1 .bc-rank { color: var(--ink) !important; }
+/* swap stage lights in white */
+.ss-glow.g-sol, .ss-glow.g-zats { background: radial-gradient(closest-side, rgba(255, 255, 255, 0.12), transparent) !important; }
+.ss-ring::before { background: radial-gradient(circle at 50% 35%, #232325, var(--card) 70%) !important; box-shadow: 0 0 60px -14px rgba(255, 255, 255, 0.18) !important; }
+.sst-flow { stroke: rgba(255, 255, 255, 0.6) !important; }
+/* the logo keeps its gold */
+.nav .logo .wordmark { color: #e9b44c !important; -webkit-text-fill-color: #e9b44c; }
+/* the holder figure on the Live page in grey, not lilac */
+.lp-st.st-holders img { filter: grayscale(1) brightness(1.05); }

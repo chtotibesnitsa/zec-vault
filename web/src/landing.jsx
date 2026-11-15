@@ -2,6 +2,7 @@
 // feed; before launch they come from labelled sample data and never link to
 // a transaction.
 import { useEffect, useRef, useState } from 'react';
+import SegClock from './segclock.jsx';
 import { BurnBlock, CoinStack, FeePrism, Furnace, HolderGrid, ShieldGem, TimerRing, TradeBars, WalletKey } from './obj3d.jsx';
 import { brand, fill } from './brand.js';
 import { api, ago, fmtNum, rawToUi, short, solscanAcct } from './api.js';
@@ -97,12 +98,11 @@ export function Hero5({ cfg, s, preview, events = [] }) {
 // payout; holders circle it; gold dashes stream from the center to every
 // holder; trades fly in from outside to feed it; a burn node takes its cut;
 // the ring pulses when a payout lands. SVG + CSS transforms only.
-const HOLDER_TONES = ['var(--c-people)', 'var(--c-trade)', 'var(--c-vault)', 'var(--c-pay)', 'var(--c-people)', 'var(--c-burn)', 'var(--c-trade)', 'var(--c-vault)', 'var(--c-pay)', 'var(--c-people)', 'var(--c-trade)', 'var(--c-vault)'];
 const C0 = 300; // center of the 600x600 drawing
-const R_RING = 168;
-const R_HOLD = 252;
-const INFLOW = Array.from({ length: 10 }, (_, i) => ({ a: (i * 137.5 + 20) % 360, d: (i * 0.53) % 4.2, tone: i % 3 === 2 ? 'var(--c-sell)' : 'var(--c-trade)' }));
+const R_RING = 200;
 
+// The payout timer: a plain dial that fills over the cycle, a dot that
+// sweeps the seconds, and an alarm-clock readout in the middle.
 function PayoutClock({ s, cfg }) {
   const live = cfg?.live;
   const cm = cfg?.cycleMinutes || 5;
@@ -116,103 +116,35 @@ function PayoutClock({ s, cfg }) {
   const p = 1 - left / (cm * 60000);
   const mm = String(Math.floor(left / 60000)).padStart(2, '0');
   const ss = String(Math.floor(left / 1000) % 60).padStart(2, '0');
-  const circ = 2 * Math.PI * R_RING;
-  const n = HOLDER_TONES.length;
+  const sec = Math.floor(now / 1000) % 60;
   return (
     <div className="pclock">
-      <svg viewBox="0 0 600 600" className="pc-svg">
-        <defs>
-          <linearGradient id="pcFill" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" style={{ stopColor: "var(--c-trade)" }} />
-            <stop offset="1" style={{ stopColor: "var(--c-pay)" }} />
-          </linearGradient>
-          <radialGradient id="pcCore">
-            <stop offset="0" style={{ stopColor: "var(--c-pay)", stopOpacity: 0.22 }} />
-            <stop offset="1" style={{ stopColor: "var(--c-pay)", stopOpacity: 0 }} />
-          </radialGradient>
-        </defs>
-
-        {/* incoming trades: dots fly in from outside and feed the center */}
-        <g className="pc-in">
-          {INFLOW.map((t, i) => (
-            <circle key={i} r="4.5" cx={C0} cy={C0} style={{ '--a': `${t.a}deg`, '--d': `${-t.d}s`, fill: t.tone }} />
-          ))}
-        </g>
-
-        {/* holders orbit, each with a spoke that carries payouts out */}
-        <g className="pc-orbit">
-          <circle cx={C0} cy={C0} r={R_HOLD} className="pc-track" />
-          {HOLDER_TONES.map((tone, i) => {
-            const a = (i / n) * Math.PI * 2;
-            const x = C0 + Math.cos(a) * R_HOLD;
-            const y = C0 + Math.sin(a) * R_HOLD;
-            const x0 = C0 + Math.cos(a) * (R_RING + 18);
-            const y0 = C0 + Math.sin(a) * (R_RING + 18);
-            return (
-              <g key={i} style={{ '--i': i }}>
-                <line x1={x0} y1={y0} x2={x} y2={y} className="pc-spoke" />
-                <line x1={x0} y1={y0} x2={x} y2={y} className="pc-pay" />
-                <circle cx={x} cy={y} r="17" className="pc-holder" style={{ '--tone': tone }} />
-                <circle cx={x} cy={y} r="6" className="pc-holder-in" style={{ '--tone': tone }} />
-              </g>
-            );
-          })}
-        </g>
-
-        {/* the burn node takes its share */}
-        <g className="pc-burn">
-          <line x1={C0} y1={C0 - R_RING - 18} x2={C0} y2={34} className="pc-burnline" />
-          <circle cx={C0} cy={26} r="15" />
-          <path d="M300 16c-4 5-7 8-7 12a7 7 0 0 0 14 0c0-3-2-5-3-7-1 2-2 3-3 3 0-3 0-5-1-8Z" />
-        </g>
-
-        {/* ticks, the track and the filling ring */}
+      <svg viewBox="0 0 600 600" className="pc-svg" aria-hidden="true">
+        <circle cx={C0} cy={C0} r={R_RING + 34} className="pc-outer" />
         <g className="pc-ticks">
           {Array.from({ length: 60 }, (_, i) => {
             const a = (i / 60) * Math.PI * 2 - Math.PI / 2;
-            const r0 = i % 5 ? R_RING - 22 : R_RING - 30;
-            return <line key={i} x1={C0 + Math.cos(a) * r0} y1={C0 + Math.sin(a) * r0} x2={C0 + Math.cos(a) * (R_RING - 16)} y2={C0 + Math.sin(a) * (R_RING - 16)} className={i / 60 <= p ? 'on' : ''} />;
+            const big = i % 5 === 0;
+            const r0 = R_RING + (big ? 6 : 10);
+            const r1 = R_RING + 20;
+            return <line key={i} x1={C0 + Math.cos(a) * r0} y1={C0 + Math.sin(a) * r0} x2={C0 + Math.cos(a) * r1} y2={C0 + Math.sin(a) * r1} className={`${big ? 'big' : ''} ${i / 60 <= p ? 'on' : ''}`} />;
           })}
         </g>
-        <circle cx={C0} cy={C0} r={R_RING - 40} fill="url(#pcCore)" className="pc-core" />
         <circle cx={C0} cy={C0} r={R_RING} className="pc-ring-bg" />
-        <circle
-          cx={C0}
-          cy={C0}
-          r={R_RING}
-          className="pc-ring"
-          stroke="url(#pcFill)"
-          strokeDasharray={circ}
-          strokeDashoffset={circ * (1 - p)}
-          style={{ transform: 'rotate(-90deg)' }}
-        />
-        <circle cx={C0} cy={C0} r={R_RING} className="pc-pulse" />
-        <g className="pc-hand" style={{ transform: `rotate(${p * 360}deg)` }}>
-          <circle cx={C0} cy={C0 - R_RING} r="7" />
+        <circle cx={C0} cy={C0} r={R_RING} className="pc-ring" pathLength="100" strokeDasharray="100" strokeDashoffset={100 * (1 - p)} style={{ transform: 'rotate(-90deg)' }} />
+        <g className="pc-sweep" style={{ transform: `rotate(${sec * 6}deg)` }}>
+          <circle cx={C0} cy={C0 - R_RING - 34} r="4" />
         </g>
       </svg>
       <div className="pc-center">
-        <span className="ct-label">
-          <i /> Next payout
-        </span>
-        <b className="ct-time">
-          {mm}
-          <span>:</span>
-          {ss}
-        </b>
+        <span className="ct-label">Next payout</span>
+        <div className="pc-lcd">
+          <SegClock mm={mm} ss={ss} />
+        </div>
         <span className="ct-foot">
-          <span className="w-pay">{fmtNum(s?.rewardsPaid || 0)}</span> paid · <span className="w-people">{int(s?.holders || 0)}</span> holders
+          {fmtNum(s?.rewardsPaid || 0)} paid · {int(s?.holders || 0)} holders
         </span>
       </div>
-      <span className="pc-tag t-in">
-        <i className="dot-trade" /> trades pay fees in
-      </span>
-      <span className="pc-tag t-out">
-        <i className="dot-people" /> 80% out to holders
-      </span>
-      <span className="pc-tag t-burn">
-        <i className="dot-burn" /> 10% burned
-      </span>
     </div>
   );
 }

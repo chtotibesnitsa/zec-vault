@@ -1,89 +1,60 @@
 /* ==========================================================================
    Home hero: the payout clock (see PayoutClock in landing.jsx).
-   Drawn with SVG; every motion is a transform, opacity or dash offset.
+   A plain dial and a seven-segment readout, black and white.
    ========================================================================== */
 .pclock { position: absolute; inset: 0; display: grid; place-items: center; }
 .pc-svg {
-  width: min(100%, 580px);
+  width: min(100%, 560px);
   height: auto;
   overflow: visible;
-  translate: calc(var(--px, 0) * -10px) calc(var(--py, 0) * -8px);
+  translate: calc(var(--px, 0) * -8px) calc(var(--py, 0) * -6px);
   transition: translate 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
   animation: pcIn 1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
-@keyframes pcIn { from { opacity: 0; scale: 0.92; } }
+@keyframes pcIn { from { opacity: 0; scale: 0.96; } }
 .pc-svg * { transform-box: view-box; transform-origin: 300px 300px; }
 
-/* holders orbit slowly */
-.pc-orbit { animation: pcOrbit 120s linear infinite; }
-@keyframes pcOrbit { to { transform: rotate(360deg); } }
-.pc-track { fill: none; stroke: rgba(255, 255, 255, 0.08); stroke-width: 1.5; stroke-dasharray: 2 9; }
-.pc-spoke { stroke: rgba(255, 255, 255, 0.06); stroke-width: 1.5; }
-.pc-pay { stroke: var(--c-pay); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 7 92; animation: pcPay 2.4s linear infinite; animation-delay: calc(var(--i) * -0.2s); }
-@keyframes pcPay { from { stroke-dashoffset: 99; } to { stroke-dashoffset: 0; } }
-.pc-holder { fill: color-mix(in srgb, var(--tone) 18%, #17181c); stroke: var(--tone); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: pcPing 2.4s ease-out infinite; animation-delay: calc(var(--i) * -0.2s + 1.6s); }
-@keyframes pcPing { 0%, 70%, 100% { transform: scale(1); } 80% { transform: scale(1.18); } }
-.pc-holder-in { fill: var(--tone); }
+.pc-outer { fill: none; stroke: rgba(255, 255, 255, 0.06); stroke-width: 1; }
+.pc-ticks line { stroke: rgba(255, 255, 255, 0.12); stroke-width: 1.5; stroke-linecap: round; transition: stroke 0.5s; }
+.pc-ticks line.big { stroke-width: 2.5; stroke: rgba(255, 255, 255, 0.22); }
+.pc-ticks line.on { stroke: rgba(255, 255, 255, 0.7); }
+.pc-ring-bg { fill: rgba(255, 255, 255, 0.015); stroke: rgba(255, 255, 255, 0.07); stroke-width: 2; }
+.pc-ring { fill: none; stroke: #f3f2ee; stroke-width: 2; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+.pc-sweep { transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.pc-sweep circle { fill: #f3f2ee; }
 
-/* trades fly in from outside and feed the center */
-.pc-in circle { opacity: 0; animation: pcInflow 4.2s cubic-bezier(0.5, 0, 0.75, 0.4) infinite; animation-delay: var(--d); }
-@keyframes pcInflow {
-  0% { transform: rotate(var(--a)) translateX(330px) scale(0.6); opacity: 0; }
-  15% { opacity: 1; }
-  80% { opacity: 1; }
-  100% { transform: rotate(var(--a)) translateX(120px) scale(1); opacity: 0; }
-}
-
-/* the burn node */
-.pc-burn circle { fill: color-mix(in srgb, var(--c-burn) 20%, #17181c); stroke: var(--c-burn); stroke-width: 2; }
-.pc-burn path { fill: var(--c-burn); transform-box: fill-box; transform-origin: 50% 90%; animation: pcFlame 0.9s ease-in-out infinite alternate; }
-@keyframes pcFlame { from { transform: scale(0.9, 0.85); } to { transform: scale(1.05, 1.1); } }
-.pc-burnline { stroke: var(--c-burn); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 5 13; animation: pcBurn 1.4s linear infinite; }
-@keyframes pcBurn { to { stroke-dashoffset: -36; } }
-
-/* the clock face */
-.pc-ticks line { stroke: rgba(255, 255, 255, 0.13); stroke-width: 2; stroke-linecap: round; transition: stroke 0.4s; }
-.pc-ticks line.on { stroke: color-mix(in srgb, var(--c-pay) 75%, transparent); }
-.pc-ring-bg { fill: none; stroke: rgba(255, 255, 255, 0.07); stroke-width: 10; }
-.pc-ring { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
-.pc-hand { transition: transform 1s linear; }
-.pc-hand circle { fill: #fff6dc; stroke: var(--c-pay); stroke-width: 3; }
-.pc-core { animation: pcCore 4.8s ease-in-out infinite; }
-@keyframes pcCore { 50% { transform: scale(1.12); opacity: 0.7; } }
-.pc-pulse { fill: none; stroke: var(--c-pay); stroke-width: 2; opacity: 0; animation: pcPulse 2.4s ease-out infinite; }
-@keyframes pcPulse { 0% { opacity: 0.55; transform: scale(1); } 100% { opacity: 0; transform: scale(1.48); } }
-
-/* the timer in the middle */
+/* the readout */
 .pc-center {
   position: absolute;
   display: grid;
   justify-items: center;
-  gap: 6px;
+  gap: 14px;
   text-align: center;
-  translate: calc(var(--px, 0) * -4px) calc(var(--py, 0) * -3px);
+  translate: calc(var(--px, 0) * -3px) calc(var(--py, 0) * -2px);
   transition: translate 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.pc-center .ct-label { justify-content: center; }
-.pc-center .ct-time { font-size: clamp(48px, 5.6vw, 68px); }
-
-/* small labels around the clock */
-.pc-tag { position: absolute; display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; font-size: 12.5px; color: var(--muted); background: rgba(23, 24, 28, 0.9); border: 1px solid var(--line); white-space: nowrap; }
-.pc-tag i { width: 8px; height: 8px; border-radius: 50%; }
-.pc-tag .dot-trade { background: var(--c-trade); }
-.pc-tag .dot-people { background: var(--c-people); }
-.pc-tag .dot-burn { background: var(--c-burn); }
-.pc-tag.t-in { left: 0; bottom: 10%; }
-.pc-tag.t-out { right: 0; top: 52%; }
-.pc-tag.t-burn { left: 58%; top: 2%; }
+.pc-center .ct-label { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
+.pc-center .ct-label i { display: none; }
+.pc-lcd {
+  padding: 18px 22px 16px;
+  border-radius: 14px;
+  background: #0a0a0b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 20px 40px -20px rgba(0, 0, 0, 0.9);
+}
+.segclock { display: block; width: clamp(200px, 21vw, 280px); height: auto; overflow: visible; }
+.sg-on { fill: #f3f2ee; filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.35)); }
+.sg-off { fill: rgba(255, 255, 255, 0.045); }
+.sg-colon rect { fill: #f3f2ee; animation: sgBlink 1s steps(1) infinite; }
+@keyframes sgBlink { 50% { opacity: 0.15; } }
+.pc-center .ct-foot { font-size: 12.5px; color: var(--muted); font-feature-settings: 'tnum' 1; }
 
 /* the latest payout chip sits under the clock on the right */
 .h10-latest { top: auto !important; bottom: 2% !important; right: 2% !important; }
 
 @media (max-width: 900px) {
-  .pc-tag.t-out { top: auto; bottom: 22%; }
-  .pc-tag { font-size: 11.5px; }
+  .segclock { width: 200px; }
+  .pc-lcd { padding: 14px 16px 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pc-svg, .pc-orbit, .pc-pay, .pc-holder, .pc-in circle, .pc-burn path, .pc-burnline, .pc-core, .pc-pulse { animation: none !important; }
-  .pc-in circle { opacity: 0; }
+  .pc-svg, .sg-colon rect { animation: none !important; }
 }

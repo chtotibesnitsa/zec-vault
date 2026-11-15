@@ -35,11 +35,9 @@ function makeNoise(seed = 7) {
   };
 }
 
-// Contour colors: mostly quiet warm grey, every few lines a brand tint.
+// Contour colors: quiet grey, with brighter index lines like a survey map.
 function levelStyle(k) {
-  if (k === 3) return 'rgba(231, 169, 47, 0.22)'; // gold
-  if (k === 7) return 'rgba(150, 132, 230, 0.20)'; // violet
-  if (k === 9) return 'rgba(88, 196, 140, 0.16)'; // green
+  if (k === 3 || k === 7) return 'rgba(255, 255, 255, 0.16)'; // index lines
   return 'rgba(236, 230, 220, 0.1)';
 }
 

@@ -151,7 +151,7 @@ export default function App() {
           <VaultApp stats={stats} events={events} cfg={cfg} />
         ) : page === 'swap' ? (
           <main>
-            <SceneBand kind="exchange" tone="trade" title={<><span className="w-people">SOL</span> in, <span className="w-pay">${brand.ticker}</span> out</>} sub="Routed by Jupiter, signed in your wallet. We add 0%." legend={[['#9f8ee6', 'SOL'], ['var(--c-trade)', '0% from us'], ['var(--c-pay)', `$${brand.ticker}`]]} />
+            <SceneBand kind="exchange" tone="trade" title={<><span className="w-people">SOL</span> in, <span className="w-pay">${brand.ticker}</span> out</>} sub="Routed by Jupiter, signed in your wallet. We add 0%." legend={[['#8e8f94', 'SOL'], ['var(--c-trade)', '0% from us'], ['var(--c-pay)', `$${brand.ticker}`]]} />
             <SwapSection cfg={cfg} />
             <Reveal>
               <Buy cfg={cfg} />
@@ -542,7 +542,7 @@ function HowPage({ cfg, proof }) {
 function BoardsPage({ proof, preview }) {
   return (
     <main>
-      <SceneBand kind="podium" tone="people" title={<>The <span className="w-pay">leader</span><span className="w-people">boards</span></>} sub="Who has been paid the most, who has held the longest without selling, and who has invited the most holders." legend={[['#e7a92f', 'most paid'], ['#c0c6d2', 'second'], ['#c47a3f', 'third']]} />
+      <SceneBand kind="podium" tone="people" title={<>The <span className="w-pay">leader</span><span className="w-people">boards</span></>} sub="Who has been paid the most, who has held the longest without selling, and who has invited the most holders." legend={[['#f3f2ee', 'most paid'], ['#9a9a96', 'second'], ['#5e5e5b', 'third']]} />
       <TopEarners />
       <Reveal>
         <section className="section" id="community">
