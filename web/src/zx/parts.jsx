@@ -562,7 +562,7 @@ export function Terminal({ lines, wait }) {
 }
 
 // ---------- happening right now ----------
-const TAG = { buy: 'BUY', sell: 'SELL', claim: 'FEES IN', buyback: 'SWAP', burn: 'BURN', payout: 'PAID', join: 'JOINED' };
+const TAG = { buy: 'BUY', sell: 'SELL', claim: 'FEES IN', topup: 'TOP-UP', buyback: 'SWAP', burn: 'BURN', payout: 'PAID', join: 'JOINED' };
 function evLine(e, cfg) {
   const d = cfg?.decimals ?? 6;
   const rd = cfg?.rewardDecimals ?? d;
@@ -575,6 +575,8 @@ function evLine(e, cfg) {
       return [nm, `sold ${fmtNum(rawToUi(e.amountRaw, d))} ${TICK}`, sol];
     case 'claim':
       return ['vault', 'claimed creator fees', sol];
+    case 'topup':
+      return ['vault', `added a team top-up to the ${e.meta?.to === 'burn' ? 'burn' : 'holder rewards'}`, sol];
     case 'buyback':
       return ['vault', `swapped fees into ${fmtNum(rawToUi(e.amountRaw, rd))} ${rewardSym(cfg)}`, sol];
     case 'burn':

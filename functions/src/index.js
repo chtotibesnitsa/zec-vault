@@ -717,7 +717,7 @@ export class Vault {
   feed(url) {
     const limit = Math.min(100, Math.max(1, Math.floor(Number(url.searchParams.get('limit'))) || 40));
     const after = Math.max(0, Math.floor(Number(url.searchParams.get('after')) || 0));
-    const kinds = (url.searchParams.get('kinds') || 'buy,sell,claim,buyback,burn,payout').split(',').filter((k) => /^[a-z]+$/.test(k));
+    const kinds = (url.searchParams.get('kinds') || 'buy,sell,claim,topup,buyback,burn,payout').split(',').filter((k) => /^[a-z]+$/.test(k));
     const placeholders = kinds.map(() => '?').join(',');
     const rows = this.sql
       .exec(`SELECT * FROM events WHERE id > ? AND kind IN (${placeholders}) ORDER BY id DESC LIMIT ?`, after, ...kinds, limit)
@@ -864,6 +864,27 @@ export class Vault {
       this.set('last_cycle_at', '0');
       await this.tick('all');
       return json({ ok: true, lastError: this.get('last_error'), lastClaimError: this.get('last_claim_error'), pending: this.get('pending') || null });
+    }
+    // Books SOL that was sent to the vault wallet by hand (not creator fees)
+    // into the next cycle: by default into holder rewards, or into the burn.
+    // Only SOL the wallet holds beyond everything already booked can be used.
+    if (p === '/api/admin/topup') {
+      const body = await req.json().catch(() => ({}));
+      const lamports = BigInt(Math.round(Number(body.sol) * LAMPORTS) || 0);
+      if (lamports <= 0n) return json({ error: 'send { "sol": <amount> }' }, 400);
+      const signer = this.signer();
+      if (!signer) return json({ error: 'TREASURY_SECRET_KEY is not set' }, 400);
+      const c = cfg(this.env);
+      const rpc = this.makeRpc ? this.makeRpc() : new Rpc(this.env.SOLANA_RPC_URL);
+      const balance = BigInt(await rpc.getBalance(signer.publicKey.toBase58()));
+      const booked = this.big('holders_budget_lamports') + this.big('burn_budget_lamports') + BigInt(Math.round(c.gasReserveSol * LAMPORTS));
+      const free = balance > booked ? balance - booked : 0n;
+      if (lamports > free) return json({ error: `only ${Number(free) / LAMPORTS} SOL in the vault wallet is not already booked` }, 400);
+      const toBurn = body.to === 'burn';
+      this.addBig(toBurn ? 'burn_budget_lamports' : 'holders_budget_lamports', lamports);
+      this.addBig('topup_lamports', lamports);
+      this.event({ kind: 'topup', sig: null, wallet: signer.publicKey.toBase58(), lamports, meta: { to: toBurn ? 'burn' : 'holders' } });
+      return json({ ok: true, booked: Number(lamports) / LAMPORTS, to: toBurn ? 'burn' : 'holders' });
     }
     return json({ error: 'not found' }, 404);
   }

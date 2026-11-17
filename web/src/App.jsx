@@ -1054,6 +1054,7 @@ function Admin() {
     }
   };
   const st = status?.stats;
+  const [topup, setTopup] = useState('');
   return (
     <main className="app">
       <section className="section">
@@ -1073,6 +1074,15 @@ function Admin() {
               </button>
               <button className="btn btn-ghost" onClick={() => act('/api/admin/pause', { paused: !st.config.paused }, st.config.paused ? 'Resume' : 'Pause')}>
                 {st.config.paused ? 'Resume payouts' : 'Pause payouts'}
+              </button>
+            </div>
+            <div className="lookup">
+              <input inputMode="decimal" value={topup} onChange={(e) => setTopup(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="SOL you sent to the vault wallet" />
+              <button className="btn" disabled={!(Number(topup) > 0)} onClick={() => act('/api/admin/topup', { sol: Number(topup) }, `Book ${topup} SOL for holders`)}>
+                Add to holder rewards
+              </button>
+              <button className="btn btn-ghost" disabled={!(Number(topup) > 0)} onClick={() => act('/api/admin/topup', { sol: Number(topup), to: 'burn' }, `Book ${topup} SOL for burn`)}>
+                Add to burn
               </button>
             </div>
             <dl className="spec card">

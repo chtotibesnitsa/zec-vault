@@ -259,6 +259,20 @@ for (const [label, programId] of [
       expect(stats.holders).toBe(2);
       expect(stats.paidWallets).toBe(2);
 
+      // SOL sent to the vault by hand is booked only through the admin top-up,
+      // and never beyond what the wallet holds on top of existing budgets.
+      const post = (path, body, key = 'k') => vault.fetch(new Request('https://v' + path, { method: 'POST', headers: { 'x-admin-key': key, 'content-type': 'application/json' }, body: JSON.stringify(body) })).then((r) => r.json().then((j) => ({ status: r.status, ...j })));
+      expect((await post('/api/admin/topup', { sol: 0.2 }, 'wrong')).status).toBe(401);
+      expect((await post('/api/admin/topup', { sol: 50 })).status).toBe(400);
+      const ok = await post('/api/admin/topup', { sol: 0.2 });
+      expect(ok.ok).toBe(true);
+      expect(vault.get('holders_budget_lamports')).toBe(String(0.2 * LAMPORTS_PER_SOL));
+      const burnUp = await post('/api/admin/topup', { sol: 0.1, to: 'burn' });
+      expect(burnUp.to).toBe('burn');
+      expect(vault.get('burn_budget_lamports')).toBe(String(0.1 * LAMPORTS_PER_SOL));
+      vault.set('holders_budget_lamports', '0');
+      vault.set('burn_budget_lamports', '0');
+
       const feed = vault.feed(new URL('https://x/api/feed'));
       expect(feed.events.filter((e) => e.kind === 'payout')).toHaveLength(2);
 
