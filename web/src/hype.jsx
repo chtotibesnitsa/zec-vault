@@ -153,8 +153,8 @@ const Split = {
     let acc = 0;
     const labels = [
       ['80%', 'TO HOLDERS'],
-      ['10%', 'BOUGHT + BURNED'],
-      ['10%', 'RUNS THE PROJECT'],
+      ['20%', 'BOUGHT + BURNED'],
+      ['0%', 'TO THE TEAM'],
       ['100%', 'ON-CHAIN'],
     ];
     return (
@@ -318,7 +318,7 @@ const End = {
             {brand.site} <span className="muted">·</span> @{brand.xHandle}
           </div>
           <div className="hy-end-facts pixel" style={{ opacity: seg(lp, 3 * B, 3.4 * B) }}>
-            80% to holders · 10% burned · 0% swap fee
+            80% to holders · 20% burned · 0% swap fee
           </div>
         </div>
         <Flash lp={lp} />

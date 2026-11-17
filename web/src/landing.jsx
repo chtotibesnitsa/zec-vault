@@ -64,7 +64,7 @@ export function Hero5({ cfg, s, preview, events = [] }) {
           </span>
         </h1>
         <p className="h5-sub">
-          Every trade pays a creator fee. <span className="w-pay">80%</span> goes back to holders in ${brand.ticker}, <span className="w-burn">10%</span> buys ${brand.ticker} and burns it. Hold in any wallet. No staking, no KYC.
+          Every trade pays a creator fee. <span className="w-pay">80%</span> goes back to holders in ${brand.ticker}, <span className="w-burn">20%</span> buys ${brand.ticker} and burns it. Hold in any wallet. No staking, no KYC.
         </p>
         <div className="h5-cta">
           <Link className="btn" to="/swap">

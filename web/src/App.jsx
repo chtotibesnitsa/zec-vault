@@ -1,5 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import Terrain from './terrain.jsx';
+import LiquidMap from './zx/bg.jsx';
+import { ZNav, Ticker, ZFooter } from './zx/parts.jsx';
+import { ZHome, ZLive, ZSwap, ZHow, ZBoards } from './zx/pages.jsx';
 import { Ambient, detectLite, useDepth } from './glass.jsx';
 import { CoinDrop, FeeSplit, FriendsOrbit, HoldSafe, NameCard, SwapCubes, TokenCoin, ZCoin } from './obj3d.jsx';
 import StillScene from './stills.jsx';
@@ -139,35 +141,29 @@ export default function App() {
 
   return (
     <AuthProvider notify={notify}>
-    <div className={`site v-${brand.key}`} style={{ "--n": brand.name.length }}>
-      <div className="bg-grid" aria-hidden="true" />
-      <Ambient page={page} />
-      <Terrain />
-      <Nav page={page} cfg={cfg} />
+    <div className={`site zx v-${brand.key}`} style={{ "--n": brand.name.length }}>
+      <LiquidMap />
+      <div className="zx-grid" aria-hidden="true" />
+      <ZNav page={page} cfg={cfg} />
+      <Ticker s={stats.data} cfg={cfg} />
       <div className="page" key={page}>
         {page === 'admin' ? (
           <Admin />
         ) : page === 'app' ? (
           <VaultApp stats={stats} events={events} cfg={cfg} />
         ) : page === 'swap' ? (
-          <main>
-            <SceneBand kind="exchange" tone="trade" title={<><span className="w-people">SOL</span> in, <span className="w-pay">${brand.ticker}</span> out</>} sub="Routed by Jupiter, signed in your wallet. We add 0%." legend={[['#8e8f94', 'SOL'], ['var(--c-trade)', '0% from us'], ['var(--c-pay)', `$${brand.ticker}`]]} />
-            <SwapSection cfg={cfg} />
-            <Reveal>
-              <Buy cfg={cfg} />
-            </Reveal>
-          </main>
+          <ZSwap cfg={cfg} />
         ) : page === 'live' ? (
-          <LivePage events={events} cfg={cfg} preview={preview} proof={proofOf(stats.data, preview)} />
+          <ZLive s={stats.data} cfg={cfg} events={events} />
         ) : page === 'how' ? (
-          <HowPage cfg={cfg} proof={proofOf(stats.data, preview)} />
+          <ZHow s={stats.data} cfg={cfg} />
         ) : page === 'boards' ? (
-          <BoardsPage proof={proofOf(stats.data, preview)} preview={preview} />
+          <ZBoards cfg={cfg} />
         ) : (
-          <Landing go={go} stats={stats} events={events} cfg={cfg} preview={preview} />
+          <ZHome s={stats.data} cfg={cfg} events={events} />
         )}
       </div>
-      <Footer page={page} />
+      <ZFooter />
       <Toasts items={toasts} cfg={cfg} />
       <PixelWipe state={wipe} />
       {notice && <div className="notice pixel">{notice}</div>}

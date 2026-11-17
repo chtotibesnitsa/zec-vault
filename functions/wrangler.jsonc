@@ -16,7 +16,7 @@
     "BRAND_NAME": "Zatoshi",
     "CLAIM_EVERY_MINUTES": "5",
     "REWARD_SHARE_BPS": "8000",
-    "BURN_BPS": "1000",
+    "BURN_BPS": "2000",
     "MIN_HOLD_TOKENS": "100000",
     "SITE_URL": "https://zec-vault.vercel.app"
   }

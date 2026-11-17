@@ -30,7 +30,7 @@ function cfg(env) {
     tokenSymbol: env.TOKEN_SYMBOL || 'VAULT',
     rewardSymbol: env.REWARD_SYMBOL || '',
     shareBps: Math.min(10000, Math.max(0, num(env.REWARD_SHARE_BPS, 8000))),
-    burnBps: Math.max(0, num(env.BURN_BPS, 1000)),
+    burnBps: Math.max(0, num(env.BURN_BPS, 2000)),
     cycleMinutes: Math.max(1, num(env.CYCLE_MINUTES, 5)),
     claimEveryMinutes: Math.max(1, num(env.CLAIM_EVERY_MINUTES, 30)),
     gasReserveSol: num(env.GAS_RESERVE_SOL, 0.05),
@@ -114,6 +114,13 @@ export class Vault {
         payouts INTEGER NOT NULL DEFAULT 0, last_paid INTEGER);
       CREATE TABLE IF NOT EXISTS holders (wallet TEXT PRIMARY KEY, amount TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
+      CREATE TABLE IF NOT EXISTS holder_seen (
+        wallet TEXT PRIMARY KEY, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+        rank INTEGER, prev_rank INTEGER);
+      CREATE TABLE IF NOT EXISTS cycles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, holders INTEGER NOT NULL,
+        joined INTEGER NOT NULL, left_n INTEGER NOT NULL, paid_raw TEXT NOT NULL, recipients INTEGER NOT NULL,
+        burned_raw TEXT NOT NULL, fees_lamports TEXT NOT NULL, sigs TEXT);
     `);
     this.sql.exec(IDENTITY_SCHEMA);
     this.id = new Identity(this);
@@ -159,6 +166,8 @@ export class Vault {
       if (p === '/api/stats') return json(await this.stats());
       if (p === '/api/feed') return json(this.feed(url));
       if (p === '/api/leaderboard') return json(this.leaderboard());
+      if (p === '/api/holders') return json(this.holdersList(url));
+      if (p === '/api/cycles') return json(this.cyclesList(url));
       if (p.startsWith('/api/holder/')) return json(this.holder(decodeURIComponent(p.slice('/api/holder/'.length))));
       if (p.startsWith('/api/admin/')) return this.admin(req, p);
       if (p === '/api/diamonds') return json(this.diamonds());
@@ -244,7 +253,17 @@ export class Vault {
           this.set('last_feed_error', `${new Date().toISOString()} ${e.message}`);
         }
       }
-      if (stage === 'scan' || this.get('paused') === '1' || !this.signer()) return;
+      if (stage === 'scan' || this.get('paused') === '1' || !this.signer()) {
+        // Without a running cycle the holder list still refreshes on the cycle timer.
+        if ((stage === 'scan' || stage === 'all') && Date.now() - Number(this.get('snapshot_at', '0')) >= c.cycleMinutes * 60000 - 5000) {
+          try {
+            await this.snapshotHolders(rpc, c);
+          } catch (e) {
+            this.set('last_feed_error', `${new Date().toISOString()} holders: ${e.message}`);
+          }
+        }
+        return;
+      }
 
       // A cycle opens in the claim stage when it is due; burn and pay follow it.
       if (stage === 'claim' || stage === 'all') {
@@ -501,14 +520,7 @@ export class Vault {
     // stage === 'pay'
     // 3. Snapshot holders and credit each one's share of the reward pool.
     const decimals = Number(this.get('mint_decimals', '6'));
-    const accounts = await rpc.getHolderAccounts(c.mint, this.get('mint_program', TOKEN_PROGRAM));
-    const exclude = new Set([...c.exclude, me]);
-    const snap = buildSnapshot(accounts, { toBase58, isEligibleOwner: isOnCurveAddress, exclude, minHoldRaw: toRaw(c.minHold, decimals) });
-    this.sql.exec('DELETE FROM holders');
-    for (const h of snap.holders) this.sql.exec('INSERT INTO holders (wallet, amount) VALUES (?, ?)', h.owner, h.amount.toString());
-    this.set('holders_total_raw', snap.total.toString());
-    this.set('holders_count', snap.holders.length);
-    this.set('snapshot_at', Date.now());
+    const snap = await this.snapshotHolders(rpc, c);
 
     const pool = this.big('reward_pool_raw');
     const { shares, dust } = allocate(pool, snap.holders, snap.total);
@@ -525,7 +537,10 @@ export class Vault {
     const rewardProgram = this.get('reward_program', TOKEN_PROGRAM);
     const owedMap = new Map(this.sql.exec('SELECT wallet, raw FROM owed').toArray().map((r) => [r.wallet, BigInt(r.raw)]));
     let picks = selectPayouts(owedMap, toRaw(c.minPayout, rewardDecimals), c.maxRecipients);
-    if (!picks.length) return true;
+    if (!picks.length) {
+      this.recordCycle(snap);
+      return true;
+    }
     let held = await this.rewardBalance(rpc, me, rewardMint);
     if (!c.rewardMint) held -= this.big('burn_owed_raw');
     picks = picks.filter((p) => {
@@ -539,7 +554,74 @@ export class Vault {
       await this.submit(rpc, 'payout', { items }, built);
       await sleep(300);
     }
+    this.recordCycle(snap);
     return true;
+  }
+
+  // Reads every token account of the mint, keeps real wallets above the
+  // minimum, and tracks when each wallet first appeared and how its rank moved.
+  async snapshotHolders(rpc, c) {
+    const decimals = Number(this.get('mint_decimals', '6'));
+    const accounts = await rpc.getHolderAccounts(c.mint, this.get('mint_program', TOKEN_PROGRAM));
+    const signer = this.signer();
+    const exclude = new Set([...c.exclude, ...(signer ? [signer.publicKey.toBase58()] : [])]);
+    const snap = buildSnapshot(accounts, { toBase58, isEligibleOwner: isOnCurveAddress, exclude, minHoldRaw: toRaw(c.minHold, decimals) });
+    const before = new Set(this.sql.exec('SELECT wallet FROM holders').toArray().map((r) => r.wallet));
+    const now = Date.now();
+    const ranked = [...snap.holders].sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0));
+    this.sql.exec('DELETE FROM holders');
+    let joined = 0;
+    ranked.forEach((h, i) => {
+      this.sql.exec('INSERT INTO holders (wallet, amount) VALUES (?, ?)', h.owner, h.amount.toString());
+      if (!before.has(h.owner)) joined++;
+      this.sql.exec(
+        `INSERT INTO holder_seen (wallet, first_seen, last_seen, rank, prev_rank) VALUES (?, ?, ?, ?, NULL)
+         ON CONFLICT(wallet) DO UPDATE SET last_seen = excluded.last_seen, prev_rank = holder_seen.rank, rank = excluded.rank`,
+        h.owner,
+        now,
+        now,
+        i + 1,
+      );
+    });
+    const kept = new Set(ranked.map((h) => h.owner));
+    let left = 0;
+    for (const w of before) if (!kept.has(w)) left++;
+    // A wallet that dropped out starts its hold time again if it comes back.
+    this.sql.exec('DELETE FROM holder_seen WHERE last_seen < ?', now);
+    this.set('holders_total_raw', snap.total.toString());
+    this.set('holders_count', ranked.length);
+    this.set('snapshot_at', now);
+    this.set('snap_joined', joined);
+    this.set('snap_left', left);
+    return { ...snap, holders: ranked, joined, left };
+  }
+
+  // One row per finished cycle: what was paid, burned and collected since the last one.
+  recordCycle(snap) {
+    const start = Number(this.get('last_cycle_at', '0')) || Date.now();
+    const paid = this.sql.exec("SELECT amount_raw, wallet, sig FROM events WHERE kind = 'payout' AND ts >= ?", start).toArray();
+    const paidRaw = paid.reduce((a, r) => a + BigInt(r.amount_raw || '0'), 0n);
+    const recipients = new Set(paid.map((r) => r.wallet)).size;
+    const sigs = [...new Set(paid.map((r) => r.sig))].slice(0, 12);
+    const burned = this.big('burned_raw');
+    const fees = this.big('fees_total_lamports');
+    const burnedSince = burned - BigInt(this.get('cycle_mark_burned', '0'));
+    const feesSince = fees - BigInt(this.get('cycle_mark_fees', '0'));
+    this.set('cycle_mark_burned', burned.toString());
+    this.set('cycle_mark_fees', fees.toString());
+    this.sql.exec(
+      'INSERT INTO cycles (ts, holders, joined, left_n, paid_raw, recipients, burned_raw, fees_lamports, sigs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      Date.now(),
+      snap.holders.length,
+      snap.joined || 0,
+      snap.left || 0,
+      paidRaw.toString(),
+      recipients,
+      (burnedSince > 0n ? burnedSince : 0n).toString(),
+      (feesSince > 0n ? feesSince : 0n).toString(),
+      JSON.stringify(sigs),
+    );
+    this.sql.exec('DELETE FROM cycles WHERE id <= (SELECT MAX(id) - 2000 FROM cycles)');
   }
 
   async rewardBalance(rpc, owner, mint) {
@@ -651,6 +733,63 @@ export class Vault {
         amountRaw: r.amount_raw,
         lamports: r.lamports,
         meta: r.meta ? JSON.parse(r.meta) : null,
+      })),
+    };
+  }
+
+  // Every eligible holder, biggest first, with hold time and rank movement.
+  holdersList(url) {
+    const limit = Math.min(1000, Math.max(1, Math.floor(Number(url.searchParams.get('limit'))) || 500));
+    const decimals = Number(this.get('mint_decimals', '6'));
+    const rd = Number(this.get('reward_decimals', String(decimals)));
+    const total = this.big('holders_total_raw');
+    const rows = this.sql
+      .exec(
+        `SELECT h.wallet, h.amount, s.first_seen, s.rank, s.prev_rank, o.paid_raw
+         FROM holders h LEFT JOIN holder_seen s ON s.wallet = h.wallet LEFT JOIN owed o ON o.wallet = h.wallet
+         ORDER BY CAST(h.amount AS INTEGER) DESC LIMIT ?`,
+        limit,
+      )
+      .toArray();
+    return {
+      snapshotAt: Number(this.get('snapshot_at', '0')) || null,
+      count: Number(this.get('holders_count', '0')),
+      joined: Number(this.get('snap_joined', '0')),
+      left: Number(this.get('snap_left', '0')),
+      total: fromRaw(total, decimals),
+      profiles: this.id.names(rows.map((r) => r.wallet)),
+      holders: rows.map((r, i) => ({
+        wallet: r.wallet,
+        rank: i + 1,
+        prevRank: r.prev_rank || null,
+        amount: fromRaw(r.amount, decimals),
+        pct: total > 0n ? Number((BigInt(r.amount) * 1000000n) / total) / 10000 : 0,
+        since: r.first_seen || null,
+        paid: fromRaw(r.paid_raw || '0', rd),
+      })),
+    };
+  }
+
+  // The payout history, newest first.
+  cyclesList(url) {
+    const limit = Math.min(200, Math.max(1, Math.floor(Number(url.searchParams.get('limit'))) || 48));
+    const decimals = Number(this.get('mint_decimals', '6'));
+    const rd = Number(this.get('reward_decimals', String(decimals)));
+    const c = cfg(this.env);
+    const rows = this.sql.exec('SELECT * FROM cycles ORDER BY id DESC LIMIT ?', limit).toArray();
+    return {
+      rewardSymbol: c.rewardSymbol || c.tokenSymbol,
+      cycles: rows.map((r) => ({
+        id: r.id,
+        ts: r.ts,
+        holders: r.holders,
+        joined: r.joined,
+        left: r.left_n,
+        paid: fromRaw(r.paid_raw, rd),
+        recipients: r.recipients,
+        burned: fromRaw(r.burned_raw, decimals),
+        feesSol: Number(BigInt(r.fees_lamports)) / LAMPORTS,
+        sigs: r.sigs ? JSON.parse(r.sigs) : [],
       })),
     };
   }

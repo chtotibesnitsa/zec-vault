@@ -99,9 +99,10 @@ export const solscanAcct = (a) => `https://solscan.io/account/${a}`;
 export function fmtNum(n, max = 2) {
   const v = Number(n);
   if (!isFinite(v)) return '—';
-  if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(2) + 'B';
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-  if (Math.abs(v) >= 1e4) return (v / 1e3).toFixed(1) + 'K';
+  const t = (x, d) => x.toFixed(d).replace(/\.0+$/, '');
+  if (Math.abs(v) >= 1e9) return t(v / 1e9, 2) + 'B';
+  if (Math.abs(v) >= 1e6) return t(v / 1e6, 2) + 'M';
+  if (Math.abs(v) >= 1e4) return t(v / 1e3, 1) + 'K';
   return v.toLocaleString('en-US', { maximumFractionDigits: max });
 }
 

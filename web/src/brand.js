@@ -61,14 +61,14 @@ const BRANDS = {
     trailer: {
       cmd: './zatoshi --shield',
       hook: ['THE SMALLEST UNIT', 'OF ZCASH'],
-      beats: ['EVERY TRADE PAYS A FEE', '80% TO HOLDERS', '10% BOUGHT AND BURNED', 'EVERY 5 MINUTES'],
+      beats: ['EVERY TRADE PAYS A FEE', '80% TO HOLDERS', '20% BOUGHT AND BURNED', 'EVERY 5 MINUTES'],
     },
     kicker: 'Zcash meta · on Solana',
     headline: 'Shielded by design. Paid by the minute.',
-    sub: 'Every trade of ${ticker} pays a creator fee. 80% is swapped into ${reward} and sent to every holder on a timer, 10% buys ${ticker} and burns it. Hold in any wallet. No staking, no KYC.',
+    sub: 'Every trade of ${ticker} pays a creator fee. 80% is swapped into ${reward} and sent to every holder on a timer, 20% buys ${ticker} and burns it. Hold in any wallet. No staking, no KYC.',
     steps: [
       ['Someone trades ${ticker}', 'Every buy and sell, on any app, pays a small Pump.fun creator fee into the vault wallet.'],
-      ['The vault splits it', '80% becomes ${reward} for holders, 10% buys ${ticker} and burns it, 10% runs the project.'],
+      ['The vault splits it', '80% becomes ${reward} for holders, 20% buys ${ticker} and burns it. 0% to the team.'],
       ['You get paid', 'Every few minutes the vault splits ${reward} across holders by balance and sends it.'],
     ],
     closer: 'Hold it. Get paid every five minutes.',

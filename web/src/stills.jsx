@@ -68,7 +68,7 @@ const ICONS = { trades: 'candles', vault: 'safe', burn: 'brazier', holders: 'per
 const NAMES = {
   trades: ['trade', 'Trades', 'every buy and sell pays a fee'],
   vault: ['vault', 'Vault', 'fees collect here'],
-  burn: ['burn', 'Burn', `10% buys ${'$' + brand.ticker} and burns it`],
+  burn: ['burn', 'Burn', `20% buys ${'$' + brand.ticker} and burns it`],
   holders: ['people', 'Holders', `80% paid out in ${'$' + brand.ticker}`],
 };
 
@@ -170,7 +170,7 @@ function LiveLayer({ a, events, tags = true }) {
           <Tag at={a.trades && [a.trades[0], a.trades[1] + 9]} tone="trade" title="Trades" sub="every buy and sell pays a fee" />
           <Tag at={a.vault} tone="vault" title="Vault" sub="fees collect here" />
           <Tag at={a.holders} tone="people" title="Holders" sub={`80% paid out in ${sym}`} />
-          <Tag at={a.burn} tone="burn" title="Burn" sub={`10% buys ${sym} and burns it`} />
+          <Tag at={a.burn} tone="burn" title="Burn" sub={`20% buys ${sym} and burns it`} />
         </>
       )}
       {items.map((it) => (

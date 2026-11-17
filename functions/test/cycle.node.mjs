@@ -262,10 +262,31 @@ for (const [label, programId] of [
       const feed = vault.feed(new URL('https://x/api/feed'));
       expect(feed.events.filter((e) => e.kind === 'payout')).toHaveLength(2);
 
+      // Holder grid and payout history.
+      const hl = vault.holdersList(new URL('https://x/api/holders'));
+      expect(hl.count).toBe(2);
+      expect(hl.holders.map((x) => x.wallet)).toEqual([alice.toBase58(), bob.toBase58()]);
+      expect(hl.holders[0].rank).toBe(1);
+      expect(hl.holders[0].pct).toBe(75);
+      expect(hl.holders[0].paid).toBe('3');
+      expect(typeof hl.holders[0].since).toBe('number');
+      const cy = vault.cyclesList(new URL('https://x/api/cycles'));
+      expect(cy.cycles).toHaveLength(1);
+      expect(cy.cycles[0].paid).toBe('4');
+      expect(cy.cycles[0].recipients).toBe(2);
+      expect(cy.cycles[0].holders).toBe(2);
+      expect(cy.cycles[0].joined).toBe(2);
+      expect(cy.cycles[0].left).toBe(0);
+
       // Second cycle with an empty pool pays nothing more.
       vault.set('last_cycle_at', '0');
       await vault.tick();
       expect(balanceOf(mint, alice)).toBe(300_000_000_000n + 3_000_000n);
+      const cy2 = vault.cyclesList(new URL('https://x/api/cycles'));
+      expect(cy2.cycles).toHaveLength(2);
+      expect(cy2.cycles[0].paid).toBe('0');
+      expect(cy2.cycles[0].joined).toBe(0);
+      expect(vault.holdersList(new URL('https://x/api/holders')).holders[0].since).toBe(hl.holders[0].since);
     });
 
     it('never pays more than the treasury holds', async () => {

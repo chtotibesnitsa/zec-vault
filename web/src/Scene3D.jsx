@@ -403,7 +403,7 @@ export function reactor(kit, minis, scene, camera, opts, ui) {
   ui.tag('Trades', 'every buy and sell pays a fee', P.market.clone().setY(1.85), css(COL.trade));
   ui.tag('Vault', 'fees collect here', new THREE.Vector3(0, 2.3, 0), css(COL.vault));
   ui.tag('Holders', `80% paid out in ${sym}`, P.holders.clone().add(new THREE.Vector3(-0.3, 0.95, -0.4)), css(COL.people));
-  ui.tag('Burn', `10% buys ${sym} and burns it`, P.furnace.clone().add(new THREE.Vector3(0.3, 2.6, 0)), css(COL.burn));
+  ui.tag('Burn', `20% buys ${sym} and burns it`, P.furnace.clone().add(new THREE.Vector3(0.3, 2.6, 0)), css(COL.burn));
 
   // Flyers
   const flyers = [];
