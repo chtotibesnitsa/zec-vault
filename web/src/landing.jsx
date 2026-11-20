@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import SegClock from './segclock.jsx';
 import { BurnBlock, CoinStack, FeePrism, Furnace, HolderGrid, ShieldGem, TimerRing, TradeBars, WalletKey } from './obj3d.jsx';
-import { brand, fill } from './brand.js';
+import { brand, fill, rewardLabel } from './brand.js';
 import { api, ago, fmtNum, rawToUi, short, solscanAcct } from './api.js';
 import { Counter, eventText, txLink } from './components.jsx';
 import { Identicon } from './proof.jsx';
@@ -193,7 +193,7 @@ export function HoldCheck({ cfg, preview }) {
       .catch(() => setErr('Vault unreachable, try again'));
   }, [target]);
   const min = fmtNum(cfg?.minHoldTokens || 100000);
-  const rs = cfg && !cfg.rewardIsOwnToken && cfg.rewardSymbol ? cfg.rewardSymbol : '$' + brand.ticker;
+  const rs = rewardLabel(cfg, '$' + brand.ticker);
   let body;
   if (!target) {
     body = (
@@ -401,7 +401,7 @@ export function FlowStory({ cfg, s }) {
   const share = (cfg?.rewardShareBps ?? 8000) / 100;
   const burn = (cfg?.burnBps ?? 1000) / 100;
   const ops = Math.max(0, 100 - share - burn);
-  const rs = cfg && !cfg.rewardIsOwnToken && cfg.rewardSymbol ? cfg.rewardSymbol : '$' + brand.ticker;
+  const rs = rewardLabel(cfg, '$' + brand.ticker);
   const steps = [
     { k: 'trade', tone: 'trade', t: `Someone trades $${brand.ticker}`, d: 'On Pump.fun, Jupiter, any app. Every buy and sell pays a small creator fee, and the vault wallet is the creator.' },
     { k: 'split', tone: 'vault', t: 'The vault splits the fee', d: `${share}% is set aside for holders, ${burn}% buys $${brand.ticker} and burns it, ${ops}% runs the project. The vault's code does the split, and every step is a public transaction you can check.` },

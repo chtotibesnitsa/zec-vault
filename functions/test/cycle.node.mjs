@@ -141,6 +141,9 @@ function setup(programId) {
 function svmRpc(svm, programId, tokenAccounts, height = { value: 100 }, landed = new Set()) {
   return {
     async call(method, params) {
+      if (method === 'getMultipleAccounts') {
+        return { value: params[0].map((a) => (svm.getAccount(new PublicKey(a)) ? { lamports: 1 } : null)) };
+      }
       if (method === 'getTokenAccountsByOwner') {
         const [owner, { mint }] = params;
         const ata = getAssociatedTokenAddressSync(new PublicKey(mint), new PublicKey(owner), true, programId);
@@ -443,3 +446,97 @@ for (const [label, programId] of [
     });
   });
 }
+
+// Paying in a separate reward token (ZEC on Solana), like production.
+for (const [label, programId] of [
+  ['SPL Token', TOKEN_PROGRAM_ID],
+  ['Token-2022', TOKEN_2022_PROGRAM_ID],
+]) {
+  describe(`ZEC reward token (${label})`, () => {
+    const make = () => {
+      const { svm, newMint, mintTo, balanceOf } = setup(programId);
+      const treasury = Keypair.generate();
+      svm.airdrop(treasury.publicKey, BigInt(LAMPORTS_PER_SOL));
+      const mint = newMint(6); // ZATS
+      const zec = newMint(8); // reward
+      const alice = Keypair.generate().publicKey; // already has a ZEC account
+      const bob = Keypair.generate().publicKey; // has none yet
+      const accounts = [mintTo(mint, alice, 300_000_000_000n), mintTo(mint, bob, 100_000_000_000n)];
+      mintTo(zec, alice, 0n);
+      mintTo(zec, treasury.publicKey, 1_000_000n); // 0.01 ZEC bought
+      const vault = new Vault(fakeState(), {
+        TOKEN_MINT: mint.toBase58(),
+        REWARD_MINT: zec.toBase58(),
+        REWARD_SYMBOL: 'ZEC',
+        SOLANA_RPC_URL: 'x',
+        TREASURY_SECRET_KEY: bs58.encode(treasury.secretKey),
+        MIN_HOLD_TOKENS: '1000',
+        CLAIM_EVERY_MINUTES: '100000',
+      });
+      vault.makeRpc = () => svmRpc(svm, programId, () => accounts);
+      vault.set('last_claim_at', Date.now());
+      return { vault, svm, zec, alice, bob, balanceOf, treasury };
+    };
+
+    it('pays holders in the reward token, pro rata', async () => {
+      const t = make();
+      t.vault.set('reward_pool_raw', '1000000');
+      await t.vault.tick();
+      expect(t.vault.get('last_error')).toBe('');
+      expect(t.balanceOf(t.zec, t.alice)).toBe(750_000n);
+      expect(t.balanceOf(t.zec, t.bob)).toBe(250_000n);
+      expect(t.vault.publicConfig().rewardSymbol).toBe('ZEC');
+      expect(t.vault.publicConfig().rewardIsOwnToken).toBe(false);
+      expect(t.vault.publicConfig().rewardDecimals).toBe(8);
+    });
+
+    it('waits to open a new token account until the payout is worth its rent', async () => {
+      const t = make();
+      // Last buy: 1 SOL bought 1_000_000 raw, so opening an account (~0.002 SOL) is worth ~2039 raw.
+      t.vault.set('reward_rate', JSON.stringify({ raw: '1000000', lamports: String(LAMPORTS_PER_SOL) }));
+      t.vault.set('reward_pool_raw', '4000'); // alice 3000 (has account), bob 1000 (< 2039, no account)
+      await t.vault.tick();
+      expect(t.balanceOf(t.zec, t.alice)).toBe(3000n);
+      expect(t.balanceOf(t.zec, t.bob)).toBe(0n);
+      expect(t.vault.holder(t.bob.toBase58()).owed).toBe('0.00001');
+      // Bob's share grows past the rent value: now he is paid in full.
+      t.vault.set('reward_pool_raw', '8000');
+      t.vault.set('last_cycle_at', '0');
+      await t.vault.tick();
+      expect(t.balanceOf(t.zec, t.bob)).toBe(3000n);
+      expect(t.vault.holder(t.bob.toBase58()).owed).toBe('0');
+    });
+  });
+}
+
+// Network costs are charged to the budgets, never to the gas reserve.
+describe('cost accounting', () => {
+  const me = Keypair.generate();
+  const tx = (pre, post, fee, tokens = { pre: [], post: [] }) => ({
+    meta: { preBalances: [pre], postBalances: [post], fee, preTokenBalances: tokens.pre, postTokenBalances: tokens.post },
+    transaction: { signatures: ['s'], message: { accountKeys: [me.publicKey.toBase58()] } },
+  });
+  const make = () => new Vault(fakeState(), { TREASURY_SECRET_KEY: bs58.encode(me.secretKey), REWARD_SHARE_BPS: '8000', BURN_BPS: '2000' });
+
+  it('books claims net of the network fee and splits 80/20', () => {
+    const v = make();
+    v.settle('claim', 'c1', tx(1_000_000_000, 1_999_995_000, 5000), {});
+    expect(v.get('fees_total_lamports')).toBe('999995000');
+    expect(v.get('holders_budget_lamports')).toBe('799996000');
+    expect(v.get('burn_budget_lamports')).toBe('199999000');
+    expect(v.get('ops_lamports')).toBe('0');
+  });
+
+  it('charges swap overhead and payout costs to the holders budget', () => {
+    const v = make();
+    const zec = 'ZEC1111111111111111111111111111111111111111';
+    v.set('holders_budget_lamports', '500000000');
+    const bal = (amt) => [{ mint: zec, owner: me.publicKey.toBase58(), uiTokenAmount: { amount: amt } }];
+    v.settle('buyback', 'b1', tx(1_000_000_000, 497_000_000, 5000, { pre: bal('0'), post: bal('4500000') }), { spend: '500000000', mint: zec });
+    expect(v.get('holders_budget_lamports')).toBe('-3000000');
+    expect(v.get('reward_pool_raw')).toBe('4500000');
+    v.settle('payout', 'p1', tx(497_000_000, 494_950_000, 10000), { items: [] });
+    expect(v.get('holders_budget_lamports')).toBe('-5050000');
+    expect(v.get('payout_cost_lamports')).toBe('2050000');
+  });
+});

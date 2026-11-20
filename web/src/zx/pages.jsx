@@ -297,7 +297,7 @@ export function ZSwap({ cfg }) {
 const FAQ = [
   ['Do I have to connect my wallet to get paid?', 'No. The vault reads every token account of the coin from the chain each cycle and sends payouts straight to each wallet. Connecting is only for the swap and for seeing your own numbers.'],
   ['Who can get paid?', 'Any normal Solana wallet holding the minimum at the snapshot. Pools, bonding curves and other program-owned accounts are skipped, and so is the vault itself.'],
-  ['Is this real ZEC?', 'Zcash runs on its own chain, so native ZEC can’t be sent on Solana. The vault pays in a Solana token: $ZATS by default, or a wrapped ZEC token such as Zenrock’s zenZEC when it is set as the reward. The ticker on this page always shows what is paid.'],
+  ['Is this real ZEC?', 'Zcash runs on its own chain, so native ZEC can’t be sent on Solana. So the vault pays in ZEC on Solana: ZEC bridged to Solana, which arrives in the same wallet that holds $ZATS and can be swapped or bridged back out to native ZEC. The ticker on this page always shows what is paid.'],
   ['Can the team take the fees?', 'The split is fixed in the vault’s settings: 80% to holders, 20% to buyback and burn, 0% to the team. Every claim, swap, burn and payout is a public transaction you can check on Solscan.'],
   ['What if a payout is tiny?', 'Amounts too small to be worth a transaction roll over to the next cycle and are added to your next payout. Nothing is lost.'],
   ['Why every 5 minutes?', 'Short cycles keep each payout close to the trading that paid for it, and you can watch the vault work in real time.'],

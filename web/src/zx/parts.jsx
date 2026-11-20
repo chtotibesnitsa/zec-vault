@@ -2,7 +2,7 @@
 // grid, cycle history, live feed and the "do I earn?" check.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import SegClock from '../segclock.jsx';
-import { brand } from '../brand.js';
+import { brand, rewardLabel } from '../brand.js';
 import { api, fmtNum, rawToUi, short, solscanAcct, solscanTx } from '../api.js';
 import { useAuth, AccountButton } from '../auth.jsx';
 import { Link } from '../nav.jsx';
@@ -11,7 +11,7 @@ import { SAMPLE, holdFor, hhmm } from './data.js';
 
 export const TICK = '$' + brand.ticker;
 const int = (v) => Math.round(Number(v) || 0).toLocaleString('en-US');
-export const rewardSym = (cfg) => (cfg && !cfg.rewardIsOwnToken && cfg.rewardSymbol ? cfg.rewardSymbol : TICK);
+export const rewardSym = (cfg) => rewardLabel(cfg, TICK);
 const split = (cfg) => ({ hold: Math.round((cfg?.rewardShareBps ?? 8000) / 100), burn: Math.round((cfg?.burnBps ?? 2000) / 100) });
 
 export const PAGES = [

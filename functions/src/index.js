@@ -13,6 +13,7 @@ import {
   buildClaimTx,
   buildJupiterTx,
   buildPayoutTx,
+  ataAddress,
   isOnCurveAddress,
   isValidAddress,
   loadKeypair,
@@ -43,8 +44,12 @@ function cfg(env) {
     priorityFee: num(env.PRIORITY_FEE_SOL, 0.00005),
     microLamports: num(env.PRIORITY_MICROLAMPORTS, 50000),
     exclude: new Set((env.EXCLUDE_WALLETS || '').split(',').map((s) => s.trim()).filter(Boolean)),
-    jupBase: env.JUPITER_API_BASE || 'https://lite-api.jup.ag/swap/v1',
+    // The keyless lite host is being retired; with a key (free at portal.jup.ag) use the main host.
+    jupBase: env.JUPITER_API_BASE || (env.JUPITER_API_KEY ? 'https://api.jup.ag/swap/v1' : 'https://lite-api.jup.ag/swap/v1'),
     jupKey: env.JUPITER_API_KEY || '',
+    // A holder with no reward token account yet is paid only once what they are
+    // owed is worth at least this many times the ~0.002 SOL it costs to open one.
+    newAccountRentX: Math.max(0, num(env.NEW_ACCOUNT_MIN_RENT_X, 1)),
   };
 }
 
@@ -403,7 +408,8 @@ export class Vault {
     const me = this.signer().publicKey.toBase58();
     const c = cfg(this.env);
     if (kind === 'claim') {
-      const gained = solDelta(tx, me, { addBackFee: true });
+      // Net of the network fee, so the gas reserve never pays for claims.
+      const gained = solDelta(tx, me);
       if (gained <= 0n) return;
       const toHolders = (gained * BigInt(c.shareBps)) / 10000n;
       const toBurn = (gained * BigInt(Math.min(c.burnBps, 10000 - c.shareBps))) / 10000n;
@@ -414,17 +420,23 @@ export class Vault {
       this.event({ kind: 'claim', sig, wallet: me, lamports: gained, meta: { toHolders: toHolders.toString(), toBurn: toBurn.toString() } });
     } else if (kind === 'buyback') {
       const got = tokenDelta(tx, me, data.mint);
-      const spent = -solDelta(tx, me);
-      this.addBig('holders_budget_lamports', -BigInt(data.spend));
+      const measured = -solDelta(tx, me);
+      // Everything the swap cost (amount, network and priority fees, the vault's
+      // own token account the first time) comes out of the holders' budget.
+      const spent = measured > BigInt(data.spend) ? measured : BigInt(data.spend);
+      this.addBig('holders_budget_lamports', -spent);
       this.addBig('sol_spent_lamports', spent);
       if (got > 0n) {
         this.addBig('reward_pool_raw', got);
         this.addBig('rewards_bought_raw', got);
+        // Reward units per SOL at the last buy, used to price new token accounts.
+        this.set('reward_rate', JSON.stringify({ raw: got.toString(), lamports: data.spend }));
       }
       this.event({ kind: 'buyback', sig, wallet: me, amountRaw: got, lamports: spent });
     } else if (kind === 'burnbuy') {
       const got = tokenDelta(tx, me, data.mint);
-      this.addBig('burn_budget_lamports', -BigInt(data.spend));
+      const measured = -solDelta(tx, me);
+      this.addBig('burn_budget_lamports', -(measured > BigInt(data.spend) ? measured : BigInt(data.spend)));
       this.addBig('burn_owed_lamports', BigInt(data.spend));
       if (got > 0n) this.addBig('burn_owed_raw', got);
       this.set('burn_buy_sig', sig);
@@ -434,9 +446,16 @@ export class Vault {
       this.addBig('burned_raw', amount);
       this.addBig('burn_sol_lamports', BigInt(data.lamports));
       this.addBig('burn_owed_lamports', -BigInt(data.lamports));
+      this.addBig('burn_budget_lamports', -BigInt(tx.meta?.fee || 0));
       this.event({ kind: 'burn', sig, wallet: me, amountRaw: amount, lamports: BigInt(data.lamports), meta: { buySig: data.buySig || null } });
     } else if (kind === 'payout') {
       const ts = Date.now();
+      // Network fees and new holder token accounts are paid from the holders' budget.
+      const cost = -solDelta(tx, me);
+      if (cost > 0n) {
+        this.addBig('holders_budget_lamports', -cost);
+        this.addBig('payout_cost_lamports', cost);
+      }
       for (const it of data.items) {
         const amount = BigInt(it.amount);
         const row = this.sql.exec('SELECT raw, paid_raw FROM owed WHERE wallet = ?', it.wallet).toArray()[0];
@@ -543,6 +562,7 @@ export class Vault {
     }
     let held = await this.rewardBalance(rpc, me, rewardMint);
     if (!c.rewardMint) held -= this.big('burn_owed_raw');
+    picks = await this.skipCostlyNewAccounts(rpc, c, picks, rewardMint, rewardProgram);
     picks = picks.filter((p) => {
       if (p.amount > held) return false;
       held -= p.amount;
@@ -624,6 +644,31 @@ export class Vault {
     this.sql.exec('DELETE FROM cycles WHERE id <= (SELECT MAX(id) - 2000 FROM cycles)');
   }
 
+  // Drops payouts to wallets that have no reward token account yet when the
+  // amount is worth less than opening one costs. They stay owed and are paid
+  // once their balance has grown. Unknown price (no buy yet) = no filter.
+  async skipCostlyNewAccounts(rpc, c, picks, rewardMint, rewardProgram) {
+    if (!picks.length || !c.newAccountRentX || !c.rewardMint) return picks;
+    let rate;
+    try {
+      rate = JSON.parse(this.get('reward_rate') || 'null');
+    } catch {
+      rate = null;
+    }
+    if (!rate || BigInt(rate.lamports) <= 0n) return picks;
+    const rentLamports = 2039280n; // rent-exempt minimum of a 165-byte token account
+    const minRaw = (rentLamports * BigInt(rate.raw) * BigInt(Math.round(c.newAccountRentX * 100))) / (BigInt(rate.lamports) * 100n);
+    const small = picks.filter((p) => p.amount < minRaw);
+    if (!small.length) return picks;
+    const exists = new Set();
+    for (const group of chunk(small, 100)) {
+      const atas = group.map((p) => ataAddress(rewardMint, p.wallet, rewardProgram));
+      const r = await rpc.call('getMultipleAccounts', [atas, { encoding: 'base64', dataSlice: { offset: 0, length: 0 }, commitment: 'confirmed' }]);
+      r.value.forEach((acc, i) => acc && exists.add(group[i].wallet));
+    }
+    return picks.filter((p) => p.amount >= minRaw || exists.has(p.wallet));
+  }
+
   async rewardBalance(rpc, owner, mint) {
     const r = await rpc.call('getTokenAccountsByOwner', [owner, { mint }, { encoding: 'jsonParsed', commitment: 'confirmed' }]);
     return r.value.reduce((a, acc) => a + BigInt(acc.account.data.parsed.info.tokenAmount.amount), 0n);
@@ -693,14 +738,14 @@ export class Vault {
       holdersTotal: fromRaw(this.big('holders_total_raw'), decimals),
       feesTotalSol: Number(this.big('fees_total_lamports')) / LAMPORTS,
       opsSol: Number(this.big('ops_lamports')) / LAMPORTS,
-      pendingBudgetSol: Number(this.big('holders_budget_lamports')) / LAMPORTS,
+      pendingBudgetSol: Math.max(0, Number(this.big('holders_budget_lamports')) / LAMPORTS),
       solSpent: Number(this.big('sol_spent_lamports')) / LAMPORTS,
       rewardsBought: fromRaw(this.big('rewards_bought_raw'), rd),
       rewardsPaid: fromRaw(this.big('rewards_paid_raw'), rd),
       rewardsPaid24h: fromRaw(paid24, rd),
       burned: fromRaw(this.big('burned_raw'), decimals),
       burnSol: Number(this.big('burn_sol_lamports')) / LAMPORTS,
-      burnPendingSol: Number(this.big('burn_budget_lamports')) / LAMPORTS,
+      burnPendingSol: Math.max(0, Number(this.big('burn_budget_lamports')) / LAMPORTS),
       rewardPool: fromRaw(this.big('reward_pool_raw'), rd),
       paidWallets,
       trades24h: trades24,

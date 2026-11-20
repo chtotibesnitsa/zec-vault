@@ -18,6 +18,11 @@
     "REWARD_SHARE_BPS": "8000",
     "BURN_BPS": "2000",
     "MIN_HOLD_TOKENS": "100000",
+    // Holders are paid in Zcash: ZEC on Solana (bridged via NEAR Intents / Omni
+    // Bridge; Jupiter-verified, 8 decimals, SPL Token, ~$2M liquidity). zenZEC
+    // (JDt9rRGa...) has no SOL route on Jupiter, so swaps into it fail.
+    "REWARD_MINT": "A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS",
+    "REWARD_SYMBOL": "ZEC",
     "SITE_URL": "https://zec-vault.vercel.app"
   }
 }

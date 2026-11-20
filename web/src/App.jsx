@@ -5,7 +5,7 @@ import { ZHome, ZLive, ZSwap, ZHow, ZBoards } from './zx/pages.jsx';
 import { Ambient, detectLite, useDepth } from './glass.jsx';
 import { CoinDrop, FeeSplit, FriendsOrbit, HoldSafe, NameCard, SwapCubes, TokenCoin, ZCoin } from './obj3d.jsx';
 import StillScene from './stills.jsx';
-import { brand, fill } from './brand.js';
+import { brand, fill, rewardLabel } from './brand.js';
 import { api, fmtNum, fmtUsd, solscanAcct, solscanTx, ago, useFeed, usePoll } from './api.js';
 import { CopyChip, Countdown, Counter, eventText, FeedTable, Marquee, Reveal, Toasts, txLink, WalletLink, Win, Wordmark } from './components.jsx';
 import { Px } from './pixel.jsx';
@@ -232,7 +232,7 @@ function StatTile({ label, children, hint, icon, big, tone }) {
 }
 
 function rewardSym(cfg) {
-  return cfg && !cfg.rewardIsOwnToken && cfg.rewardSymbol ? cfg.rewardSymbol : '$' + brand.ticker;
+  return rewardLabel(cfg, '$' + brand.ticker);
 }
 
 function StatsGrid({ s }) {

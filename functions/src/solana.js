@@ -35,6 +35,11 @@ export function isOnCurveAddress(addr) {
   }
 }
 
+// Associated token account of a wallet for a mint.
+export function ataAddress(mint, owner, program) {
+  return getAssociatedTokenAddressSync(new PublicKey(mint), new PublicKey(owner), false, new PublicKey(program)).toBase58();
+}
+
 export function isValidAddress(addr) {
   try {
     new PublicKey(addr);

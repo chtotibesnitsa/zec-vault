@@ -23,15 +23,15 @@ export function pumpfun(size = 40) {
   return `<svg class="logo" width="${size}" height="${size}" viewBox="0 0 40 40"><g transform="rotate(-45 20 20)"><rect x="5" y="12.5" width="30" height="15" rx="7.5" fill="#fff" stroke="#0E1A12" stroke-width="2"/><path d="M20 12.5h7.5a7.5 7.5 0 0 1 0 15H20Z" fill="#53D38C" stroke="#0E1A12" stroke-width="2"/><rect x="9" y="15.5" width="6" height="2.2" rx="1.1" fill="#fff" opacity=".9"/></g></svg>`;
 }
 
-// The site's own mark: the pixel shield from the nav, in gold.
-const SHIELD = ['#########', '#+++++++#', '#+++++++#', '#+++++#+#', '#++++#++#', '#+#+#+++#', '.#+#+++#.', '..#+++#..', '...###...'];
-export function zatoshi(size = 40, ink = '#F4B728', acc = '#fff4d6') {
+// The Zatoshi mark: a dot-matrix Z on a 5 x 7 grid, white dots with a gold
+// dot above and below (from social/x/zatoshi-x-avatar.png).
+const ZMARK = ['..g..', 'wwwww', '...w.', '..w..', '.w...', 'wwwww', '..g..'];
+export function zatoshi(size = 40, white = '#F6F4EE', gold = '#E9B44C') {
   let r = '';
-  SHIELD.forEach((row, y) => {
-    for (let i = 0; i < row.length; i++) {
-      if (row[i] === '#') r += `<rect x="${i}" y="${y}" width="1.02" height="1.02" fill="${ink}"/>`;
-      else if (row[i] === '+') r += `<rect x="${i}" y="${y}" width="1.02" height="1.02" fill="${acc}"/>`;
+  ZMARK.forEach((row, y) => {
+    for (let x = 0; x < 5; x++) {
+      if (row[x] !== '.') r += `<circle cx="${x + 0.5}" cy="${y + 0.5}" r="0.39" fill="${row[x] === 'g' ? gold : white}"/>`;
     }
   });
-  return `<svg class="logo zlogo" width="${size}" height="${size}" viewBox="0 0 9 9" shape-rendering="crispEdges">${r}</svg>`;
+  return `<svg class="logo zlogo" width="${(size * 5) / 7}" height="${size}" viewBox="0 0 5 7">${r}</svg>`;
 }

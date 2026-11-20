@@ -73,7 +73,7 @@ const BRANDS = {
     ],
     closer: 'Hold it. Get paid every five minutes.',
     faqExtra: [
-      ['Is this real ZEC?', 'If the reward is set to a wrapped ZEC token on Solana (such as Zenrock’s zenZEC), you receive that token, which its issuer backs 1:1 with ZEC. Otherwise the vault pays in ${ticker} bought back from the market. The token section always shows exactly what is paid.'],
+      ['Is this real ZEC?', 'Native ZEC lives on its own chain, so the vault pays in ZEC on Solana: ZEC bridged to Solana, which lands in the same wallet that holds ${ticker} and can be swapped or bridged back out to native ZEC. The token section always shows exactly what is paid.'],
     ],
   },
 };
@@ -89,9 +89,17 @@ export const brand = {
   apiUrl: (import.meta.env.VITE_API_URL || '').replace(/\/$/, ''),
 };
 
+// What holders are paid in. The backend's config wins; before it answers
+// (or pre-launch) the Zcash vault shows ZEC, which it is set up to pay.
+export function rewardLabel(cfg, ticker) {
+  if (cfg && cfg.rewardIsOwnToken) return ticker;
+  if (cfg && cfg.rewardSymbol) return cfg.rewardSymbol;
+  return brand.key === 'zec' ? 'ZEC' : ticker;
+}
+
 // Fills ${ticker} and ${reward} in copy strings.
 export function fill(s, cfg) {
   const ticker = '$' + (cfg?.tokenSymbol && cfg.tokenSymbol !== 'VAULT' ? cfg.tokenSymbol : brand.ticker);
-  const reward = cfg && !cfg.rewardIsOwnToken && cfg.rewardSymbol ? cfg.rewardSymbol : ticker;
+  const reward = rewardLabel(cfg, ticker);
   return s.replaceAll('${ticker}', ticker).replaceAll('${reward}', reward);
 }

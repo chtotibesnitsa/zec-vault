@@ -84,8 +84,8 @@ em.c-people { color: var(--c-people) !important; }
 .lockup, .fin { position: absolute; left: 50%; top: 50%; display: flex; flex-direction: column; align-items: center; gap: 28px; }
 .fin { transform: none; left: 0; right: 0; top: auto; bottom: 90px; gap: 22px; }
 .lk-row { display: flex; align-items: center; gap: 36px; }
-.wm { font-family: var(--wide); font-stretch: 125%; font-weight: 900; font-size: 150px; letter-spacing: 0.06em; line-height: 1; background: linear-gradient(180deg, #fffaf0 10%, #F4B728 70%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 10px 40px rgba(242, 180, 64, 0.35)); }
-.fin .wm { font-size: 104px; }
+.wm { font-family: 'Geist Pixel', var(--mono); font-weight: 400; font-size: 168px; letter-spacing: 0.02em; line-height: 1; color: #f6f4ee; text-shadow: 0 10px 50px rgba(0, 0, 0, 0.5); }
+.fin .wm { font-size: 116px; }
 .lk-sub { display: flex; align-items: center; gap: 16px; font-family: var(--pixel); font-size: 24px; letter-spacing: 0.14em; color: #e9dfcc; }
 .pill { font-family: var(--display); font-weight: 900; font-size: 30px; letter-spacing: -0.01em; padding: 6px 18px; border-radius: 12px; }
 .pill.gold { background: var(--zec); color: #0b0a0c; }
@@ -266,8 +266,8 @@ em.c-people { color: var(--c-people) !important; }
 .portrait .slam.huge .sw { font-size: 104px; }
 .portrait .slam .ghost { font-size: 96px; top: calc(50% - 300px); }
 .portrait .slam .ghost.g2 { top: calc(50% + 140px); }
-.portrait .wm { font-size: 84px; }
-.portrait .fin .wm { font-size: 80px; }
+.portrait .wm { font-size: 96px; }
+.portrait .fin .wm { font-size: 90px; }
 .portrait .lk-row { gap: 24px; }
 .portrait .lk-sub { font-size: 17px; flex-wrap: wrap; justify-content: center; max-width: 900px; }
 .portrait .fin { bottom: 130px; padding: 0 50px; }

@@ -11,7 +11,7 @@ Nothing is simulated. Every row in the live feed, marquee and pop-ups is a real 
 
 1. **Claim.** Every `CLAIM_EVERY_MINUTES` (default 30) the worker claims all Pump.fun creator fees owed to the vault wallet (through PumpPortal's local API, signed by the vault wallet).
 2. **Split.** The SOL received is booked: `REWARD_SHARE_BPS` (default 8000 = 80%) to holders, `BURN_BPS` (default 1000 = 10%) to buyback and burn, the rest to ops. The burn share buys the token and burns exactly what it bought, in a second public transaction. Ops stays in the wallet for you to withdraw by hand.
-3. **Buy.** Every `CYCLE_MINUTES` (default 5), if the holders' budget is at least `MIN_CYCLE_SOL`, the worker buys the reward token. With `REWARD_MINT` empty it buys back the vault's own coin on Pump.fun/PumpSwap. With `REWARD_MINT` set it swaps on Jupiter into that token.
+3. **Buy.** Every `CYCLE_MINUTES` (default 5), if the holders' budget is at least `MIN_CYCLE_SOL`, the worker swaps it on Jupiter into the reward token: ZEC on Solana (`REWARD_MINT`). With `REWARD_MINT` empty it buys back the vault's own coin on Pump.fun/PumpSwap instead.
 4. **Snapshot.** It reads every token account of the coin, adds them up per owner and drops pools, bonding curves and other program accounts (off-curve owners), the vault wallet, anything in `EXCLUDE_WALLETS`, and anyone under `MIN_HOLD_TOKENS`.
 5. **Pay.** Each holder is credited `pool × balance ÷ total`. Wallets owed at least `MIN_PAYOUT` are paid, biggest first, up to `MAX_RECIPIENTS_PER_CYCLE`, 8 transfers per transaction. It never sends more than the wallet holds; anything not sent stays owed for the next cycle.
 
@@ -42,14 +42,18 @@ Sign up at helius.dev (free plan) and copy the **Mainnet RPC URL**. The public S
 | `ADMIN_KEY` | Secret | a long random password, your login for `/admin` |
 | `TOKEN_SYMBOL` | Text | the ticker without `$` |
 | `TOKEN_MINT` | Text | leave empty until the coin exists |
-| `REWARD_MINT` | Text | empty = buy back own coin. Or a reward token mint (see below) |
-| `REWARD_SYMBOL` | Text | e.g. `zenZEC`, only if `REWARD_MINT` is set |
+| `REWARD_MINT` | Text | set in `wrangler.jsonc` to ZEC on Solana (`A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS`), so holders are paid in ZEC. Empty = buy back own coin |
+| `REWARD_SYMBOL` | Text | `ZEC` (set in `wrangler.jsonc`) |
 | `REWARD_SHARE_BPS` | Text | `8000` |
 | `BURN_BPS` | Text | `1000` |
 | `MIN_HOLD_TOKENS` | Text | `100000` (0.01% of supply) |
 | `EXCLUDE_WALLETS` | Text | comma-separated wallets never to pay (your dev or team wallets) |
 
-Optional: `CYCLE_MINUTES` (5), `CLAIM_EVERY_MINUTES` (30), `GAS_RESERVE_SOL` (0.05), `MIN_CYCLE_SOL` (0.02), `MIN_PAYOUT` (0), `MAX_RECIPIENTS_PER_CYCLE` (60), `SLIPPAGE_PCT` (15), `JUPITER_API_KEY`.
+Optional: `CYCLE_MINUTES` (5), `CLAIM_EVERY_MINUTES` (30), `GAS_RESERVE_SOL` (0.05), `MIN_CYCLE_SOL` (0.02), `MIN_PAYOUT` (0), `MAX_RECIPIENTS_PER_CYCLE` (60), `SLIPPAGE_PCT` (15), `NEW_ACCOUNT_MIN_RENT_X` (1), `JUPITER_API_KEY`.
+
+Get a free `JUPITER_API_KEY` (Secret) at portal.jup.ag: Jupiter is retiring its keyless API, and with a key the worker uses `api.jup.ag` for the SOL → ZEC swap.
+
+Network fees, and the ~0.002 SOL it costs to open a holder's first ZEC account, are paid from the holders' share, so the gas reserve never drains. A holder with no ZEC account yet is paid once what they're owed is worth at least `NEW_ACCOUNT_MIN_RENT_X` × that cost; until then it stays owed.
 
 6. Deployments → redeploy so the values load.
 
@@ -107,16 +111,17 @@ node trailer/render-ad.cjs web/dist vertical zatoshi-ad-vertical-4k60.mp4
 `--dpr 1` renders 1080p and is about 4× faster. `--stills 1,13,40 <dir>` writes review frames. `--audio-only` writes just the score. Frames are captured by several headless pages in parallel (`--workers`), saved to disk and encoded at the end, so an interrupted render resumes where it stopped. The score is synthesized by `trailer/score.py` from the shot plan and cue list the page exports (120 BPM, D minor), so every hit, riser and whoosh lands on the cut and no samples or licenses are involved. The activity rows in the proof shot are a redacted UI preview, never real or invented wallets.
 
 ### Ad 2 (fast-cut product trailer)
-`/ad2.html` is a 78 s fast-cut version: glass UI cards of the vault (wallet, live board, split, payout timer, burn counter, swap, sign-in, leaderboards) floating in CSS 3D, slam words and color floods, with Solana, Pump.fun, Jupiter, Phantom, Solflare, Backpack, MetaMask and X marks. `?cut=vertical` is the 9:16 version of the same story. Code is in `web/src/ad2/`. The marks in `logos.js` are simplified redraws; swap in official SVGs there if you have them. Render it with the same script and `--page ad2`:
+`/ad2.html` is a 78 s fast-cut version: glass UI cards of the vault (wallet, live board, split, payout timer, burn counter, swap, sign-in, leaderboards) floating in CSS 3D, slam words and color floods, with Solana, Pump.fun, Jupiter, Phantom, Solflare, Backpack, MetaMask and X marks. `?cut=vertical` is the 9:16 version of the same story. Code is in `web/src/ad2/`. The marks in `logos.js` are simplified redraws; swap in official SVGs there if you have them. Its soundtrack is `trailer/score3.py` (120 BPM indie-dance, synced to the cut list). Render it with the same script, `--page ad2` and `--score score3.py`:
 
 ```
-node trailer/render-ad.cjs web/dist main zatoshi-ad2-16x9.mp4 --page ad2
-node trailer/render-ad.cjs web/dist vertical zatoshi-ad2-9x16.mp4 --page ad2
+node trailer/render-ad.cjs web/dist main zatoshi-ad2-16x9.mp4 --page ad2 --score score3.py
+node trailer/render-ad.cjs web/dist vertical zatoshi-ad2-9x16.mp4 --page ad2 --score score3.py
 ```
 
 ### Reward token choices
-- **Own coin (default).** Fees buy the coin back and hand it to holders, like a buyback but paid out instead of burned. Always works.
-- **Wrapped ZEC.** Zenrock's zenZEC is wrapped ZEC on Solana, backed 1:1 by its issuer. Get the mint address from Zenrock's own site or app, check it on Solscan, then set `REWARD_MINT` and `REWARD_SYMBOL`.
+- **Own coin.** Fees buy the coin back and hand it to holders, like a buyback but paid out instead of burned. Always works.
+- **ZEC on Solana (what Zatoshi uses).** Mint `A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS` (8 decimals), ZEC bridged to Solana through NEAR Intents / Omni Bridge. It is verified on Jupiter and has the deep SOL liquidity the swap needs. It is set as `REWARD_MINT` with `REWARD_SYMBOL` `ZEC` in `functions/wrangler.jsonc`. Native ZEC lives on its own chain and can't be sent to a Solana wallet, so holders receive this token in the same wallet that holds $ZATS.
+- **zenZEC.** Zenrock's wrapped ZEC (`JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS`) is backed 1:1 by its issuer, but Jupiter currently finds no SOL route into it, so the swap would fail every cycle.
 - **XMR.** There is no wrapped XMR on Solana with a known issuer or proof of backing, so don't pay in one. Real XMR can't be sent to Solana wallets.
 
 ## Operator panel

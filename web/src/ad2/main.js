@@ -8,6 +8,7 @@ import '@fontsource/geist-sans/400.css';
 import '@fontsource/geist-sans/500.css';
 import '@fontsource/geist-sans/700.css';
 import '@fontsource/geist-sans/800.css';
+import '@fontsource/geist-pixel/400.css';
 import '@fontsource/geist-mono/400.css';
 import '@fontsource/geist-mono/500.css';
 import '@fontsource/geist-mono/600.css';
@@ -18,7 +19,6 @@ import { el, txt, show, typeText } from '../ad/text.js';
 import { makeBG, bgDefaults, hex, PAL } from './bg.js';
 import * as L from './logos.js';
 
-const SITE = 'orchard-vault.vercel.app';
 const X_HANDLE = '@zatoshi_sol';
 
 const params = new URLSearchParams(location.search);
@@ -275,7 +275,7 @@ SHOTS.logo = {
     const s1 = slamEl(ly, 'WHAT IF', 'white');
     const s2 = slamEl(ly, 'YOU JUST', 'white');
     const s3 = slamEl(ly, '<span class="gold">HELD?</span>', 'white');
-    const lockup = el('div', 'lockup', `<div class="lk-row">${L.zatoshi(lay(150, 120))}<div class="wm">ZATOSHI</div></div>
+    const lockup = el('div', 'lockup', `<div class="lk-row">${L.zatoshi(lay(176, 136))}<div class="wm">zatoshi</div></div>
       <div class="lk-sub"><span class="pill gold">$ZATS</span><span>HOLD IT. EARN</span>${L.zec(34)}<span>ZEC ON</span>${L.solana(30)}<span>SOLANA</span></div>`, ly);
     return (t) => {
       BG.tun = t < 2 ? 0.4 + lin(t, 0, 2) * 0.9 : 1.1 * Math.exp(-(t - 2) * 0.8) + 0.25;
@@ -395,20 +395,20 @@ SHOTS.split = {
     const pv = donut.querySelector('[data-k=p]');
     const cards = [
       ['pay', '80%', 'to holders in ZEC', 'swapped into ZEC, paid every 5 min'],
-      ['burn', '10%', 'buyback + burn', 'buys $ZATS and burns it'],
-      ['vault', '10%', 'runs the project', 'stays in the ops wallet'],
+      ['burn', '20%', 'buyback + burn', 'buys $ZATS and burns it'],
+      ['vault', '0%', 'to the team', 'no team cut, ever'],
     ].map(([tone, p, a, b]) => card(space, `scard tone-${tone}`, `<div class="sp mono">${p}</div><div><b>${a}</b><small>${b}</small></div>`));
     const h1 = head(ly, 'the vault <em class="c-vault">splits it.</em>');
     const s1 = sub(ly, 'on-chain, every claim. no one decides by hand.');
     tag(ly);
     return (t) => {
       cam(space, { z: mix(-80, 120, ease.inOut(lin(t, 0, 6))), ry: mix(-14, 10, ease.inOut(lin(t, 0, 6))), rx: 5 });
-      fly(donut, t, 0, 9, { x: lay(30, 0), y: lay(50, -150), z: 0, s: lay(0.72, 0.9) }, { from: { z: -700, s: 0.6 }, spin: 90, dur: 1 });
+      fly(donut, t, 0, 9, { x: lay(30, 0), y: lay(50, -220), z: 0, s: lay(0.72, 0.9) }, { from: { z: -700, s: 0.6 }, spin: 90, dur: 1 });
       const fill = ease.out(lin(t, 0.4, 2.8));
-      const parts = [0.8, 0.1, 0.1];
+      const parts = [0.8, 0.2, 0];
       let off = 0;
       segs.forEach((s, i) => {
-        const k = clamp((fill - off) / parts[i]);
+        const k = parts[i] > 0 ? clamp((fill - off) / parts[i]) : 0;
         const len = C * parts[i] * k - (k > 0 ? 6 : 0);
         s.setAttribute('stroke-dasharray', `${Math.max(0, len)} ${C}`);
         s.setAttribute('stroke-dashoffset', String(-C * off));
@@ -416,8 +416,8 @@ SHOTS.split = {
       });
       pv.textContent = Math.round(fill * 100) + '%';
       const pos = lay(
-        [{ x: -330, y: 262 }, { x: 420, y: -100 }, { x: 420, y: 140 }],
-        [{ x: -40, y: 320 }, { x: -40, y: 480 }, { x: -40, y: 640 }],
+        [{ x: -285, y: 250 }, { x: 420, y: -100 }, { x: 420, y: 140 }],
+        [{ x: -40, y: 250 }, { x: -40, y: 400 }, { x: -40, y: 550 }],
       );
       cards.forEach((n, i) => fly(n, t, 1.3 + i * 0.7, 9, { ...pos[i], z: 140, ry: lay(i ? -14 : 14, 0) }, { from: { z: -500, x: lay(i ? 300 : -300, 0) }, focus: 100 }));
       show(h1, t, 0.2, 9, { stagger: 0.03 });
@@ -485,7 +485,7 @@ SHOTS.burn = {
     const bv = ctr.querySelector('[data-k=b]');
     const cl = ctr.querySelector('.cds');
     const tx = card(space, 'mini tone-burn', `<span class="fic big">▲</span><div><small>BURN TX · PUBLIC</small><b>bought 1.84M $ZATS · burned 1.84M</b><p>The burn sends exactly what it bought, in a second transaction.</p></div>`);
-    const h1 = head(ly, '10% buys <em class="c-burn">$ZATS</em>');
+    const h1 = head(ly, '20% buys <em class="c-burn">$ZATS</em>');
     const h2 = head(ly, 'and <em class="c-burn">burns it.</em>', 'l2');
     const big = slamEl(ly, 'BURN.', 'dark huge');
     const h3 = head(ly, 'less supply. <em class="c-burn">every claim.</em>');
@@ -517,7 +517,7 @@ SHOTS.swap = {
     const sw = card(space, 'swapc', `<div class="sw-h"><b>Swap</b><span class="chip sm tone-trade">0% platform fee</span></div>
       <div class="sw-box"><small>You pay</small><div class="sw-r"><span class="mono big2">1.50</span><span class="tok">${L.solana(22)} SOL</span></div></div>
       <div class="sw-arrow">↓</div>
-      <div class="sw-box"><small>You get</small><div class="sw-r"><span class="mono big2" data-k="o">0</span><span class="tok">${L.zatoshi(22)} $ZATS</span></div></div>
+      <div class="sw-box"><small>You get</small><div class="sw-r"><span class="mono big2" data-k="o">0</span><span class="tok">${L.zatoshi(26)} $ZATS</span></div></div>
       <div class="sw-line"><span>Platform fee</span><b class="zero">0%</b></div>
       <div class="sw-line"><span>Route</span><b>${L.jupiter(20)} Jupiter · best route</b></div>
       <div class="sw-btn">Swap</div>`);
@@ -560,7 +560,7 @@ SHOTS.wallets = {
     const sign = card(space, 'mini tone-people', `<span class="fic big">✎</span><div><small>SIGN ONE MESSAGE</small><b>free · no transaction</b><p>It can't move funds. Then pick a public name.</p></div>`);
     const prof = card(space, 'prof', `<div class="pf-top"><span class="avatar big" style="--h:42"></span><div><small>PUBLIC NAME</small><b class="mono" data-k="n"></b></div></div>
       <div class="pf-x">${L.x(22)}<span>Link X</span><b class="ok">linked ✓</b></div>
-      <div class="pf-inv"><small>YOUR INVITE LINK</small><span class="mono">${SITE}/?ref=your_name</span></div>`);
+      <div class="pf-inv"><small>YOUR INVITE LINK</small><span class="mono">?ref=your_name</span></div>`);
     const nm = prof.querySelector('[data-k=n]');
     const xl = prof.querySelector('.pf-x');
     const h1 = head(ly, 'connect <em class="c-people">any wallet.</em>');
@@ -700,10 +700,10 @@ SHOTS.finale = {
   cues: [[0, 'final'], [0.9, 'shimmer'], [3.0, 'chime']],
   build() {
     const { ly } = layer();
-    const lock = el('div', 'fin', `<div class="lk-row">${L.zatoshi(lay(110, 96))}<div class="wm">ZATOSHI</div></div>
+    const lock = el('div', 'fin', `<div class="lk-row">${L.zatoshi(lay(126, 104))}<div class="wm">zatoshi</div></div>
       <div class="fin-tag">Hold $ZATS. Get paid in <em>ZEC</em> every five minutes.</div>
       <div class="fin-ca"><span class="pill gold">$ZATS</span><span class="ca-t">LAUNCHING ON</span>${L.pumpfun(30)}<span class="ca-t">PUMP.FUN</span></div>
-      <div class="fin-cta"><span class="mono">${SITE}</span><span class="dotsep">·</span><span class="xh">${L.x(24)}<span class="mono">${X_HANDLE.slice(1)}</span></span></div>
+      <div class="fin-cta"><span class="xh">${L.x(24)}<span class="mono">${X_HANDLE.slice(1)}</span></span></div>
       <div class="fin-logos"><span>${L.zec(26)} Zcash</span><span>${L.solana(26)} Solana</span><span>${L.pumpfun(26)} Pump.fun</span><span>${L.jupiter(26)} Jupiter</span><span>${L.phantom(26)} Phantom</span></div>
       <div class="legal">Payouts come only from real trading fees. If volume stops, payouts stop. Not affiliated with the Zcash project. Not financial advice.</div>`, ly);
     const parts = [...lock.children];
@@ -844,7 +844,7 @@ function seek(T) {
 }
 
 async function init() {
-  await Promise.all(['900 64px "Archivo Variable"', '700 64px "Geist Sans"', '800 64px "Geist Sans"', '500 20px "Geist Sans"', '400 20px "Geist Sans"', '500 20px "Geist Mono"', '600 20px "Geist Mono"'].map((f) => document.fonts.load(f)));
+  await Promise.all(['900 64px "Archivo Variable"', '700 64px "Geist Sans"', '800 64px "Geist Sans"', '500 20px "Geist Sans"', '400 20px "Geist Sans"', '400 64px "Geist Pixel"', '500 20px "Geist Mono"', '600 20px "Geist Mono"'].map((f) => document.fonts.load(f)));
   scene3.environment = makeEnv(renderer);
   let t = 0;
   for (const id of ORDER) {
