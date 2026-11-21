@@ -18,6 +18,9 @@
     "REWARD_SHARE_BPS": "8000",
     "BURN_BPS": "2000",
     "MIN_HOLD_TOKENS": "100000",
+    // Fits a payout round in the Cloudflare free plan's 50 subrequests per stage.
+    // Raise to 60 on Workers Paid.
+    "MAX_RECIPIENTS_PER_CYCLE": "30",
     // Holders are paid in Zcash: ZEC on Solana (bridged via NEAR Intents / Omni
     // Bridge; Jupiter-verified, 8 decimals, SPL Token, ~$2M liquidity). zenZEC
     // (JDt9rRGa...) has no SOL route on Jupiter, so swaps into it fail.
