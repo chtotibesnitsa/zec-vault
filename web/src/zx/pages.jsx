@@ -1,6 +1,6 @@
 // The five public pages: Home, Live, Swap, How it works, Leaderboards.
 import { useEffect, useRef, useState } from 'react';
-import { brand } from '../brand.js';
+import { brand, caOf } from '../brand.js';
 import { fmtNum, short, solscanAcct, usePoll } from '../api.js';
 import { SwapCard } from '../swap.jsx';
 import { shareOnX } from '../auth.jsx';
@@ -63,7 +63,7 @@ export function ZHome({ s, cfg, events }) {
             <Link className="zb zb-line zb-lg" to="/how">
               How payouts work
             </Link>
-            <CopyCA mint={cfg?.tokenMint} />
+            <CopyCA mint={caOf(cfg)} />
           </div>
         </div>
         <div className="zh-clock">
@@ -323,7 +323,7 @@ export function ZHow({ cfg, s }) {
               ['payout cycle', `${cfg?.cycleMinutes || 5} minutes`],
               ['min. hold', `${fmtNum(cfg?.minHoldTokens || 100000)} ${TICK}`],
               ['vault wallet', cfg?.treasury ? <a href={solscanAcct(cfg.treasury)} target="_blank" rel="noreferrer">{short(cfg.treasury)}</a> : 'published at launch'],
-              ['contract', cfg?.tokenMint ? <a href={solscanAcct(cfg.tokenMint)} target="_blank" rel="noreferrer">{short(cfg.tokenMint)}</a> : 'published at launch'],
+              ['contract', caOf(cfg) ? <a href={solscanAcct(caOf(cfg))} target="_blank" rel="noreferrer">{short(caOf(cfg))}</a> : 'published at launch'],
             ].map(([k, v]) => (
               <div key={k}>
                 <dt>{k}</dt>

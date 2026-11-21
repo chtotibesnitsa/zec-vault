@@ -43,8 +43,10 @@ const BRANDS = {
     key: 'zec',
     name: 'Zatoshi',
     ticker: 'ZATS',
-    domain: 'zatoshi.fun',
-    xHandle: 'zatoshi_sol',
+    domain: 'zatoshi.live',
+    xHandle: 'Zatvault',
+    // Contract address, shown before the backend has it. The backend's wins.
+    ca: '3Jj7HJBvgXhwRGWAgyNRJ5x91pTtjtRp9y1kkMUfpump',
     coin: 'ZEC',
     chainName: 'Zcash',
     accent: '#e9b44c',
@@ -86,6 +88,7 @@ export const brand = {
   name: import.meta.env.VITE_BRAND_NAME || base.name,
   ticker: import.meta.env.VITE_TICKER || base.ticker,
   xHandle: import.meta.env.VITE_X_HANDLE || base.xHandle,
+  ca: import.meta.env.VITE_TOKEN_CA || base.ca || '',
   apiUrl: (import.meta.env.VITE_API_URL || '').replace(/\/$/, ''),
 };
 
@@ -95,6 +98,12 @@ export function rewardLabel(cfg, ticker) {
   if (cfg && cfg.rewardIsOwnToken) return ticker;
   if (cfg && cfg.rewardSymbol) return cfg.rewardSymbol;
   return brand.key === 'zec' ? 'ZEC' : ticker;
+}
+
+// The contract address to show: the backend's once it is live, else the one
+// announced ahead of launch. Buy links and swaps still wait for cfg.tokenMint.
+export function caOf(cfg) {
+  return cfg?.tokenMint || brand.ca || null;
 }
 
 // Fills ${ticker} and ${reward} in copy strings.

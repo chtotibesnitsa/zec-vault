@@ -2,7 +2,7 @@
 // grid, cycle history, live feed and the "do I earn?" check.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import SegClock from '../segclock.jsx';
-import { brand, rewardLabel } from '../brand.js';
+import { brand, caOf, rewardLabel } from '../brand.js';
 import { api, fmtNum, rawToUi, short, solscanAcct, solscanTx } from '../api.js';
 import { useAuth, AccountButton } from '../auth.jsx';
 import { Link } from '../nav.jsx';
@@ -21,6 +21,17 @@ export const PAGES = [
   { key: 'how', to: '/how', label: 'How it works', short: 'How', icon: 'how' },
   { key: 'boards', to: '/boards', label: 'Leaderboards', short: 'Boards', icon: 'boards' },
 ];
+
+// The project's X account, as the X mark.
+export function XLink({ size = 15 }) {
+  return (
+    <a className="zb zb-line zb-sm zn-x" href={`https://x.com/${brand.xHandle}`} target="_blank" rel="noreferrer" aria-label={`${brand.name} on X (@${brand.xHandle})`} title={`@${brand.xHandle} on X`}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+      </svg>
+    </a>
+  );
+}
 
 // ---------- nav: logo, glass tab bar, buy + account ----------
 export function ZNav({ page, cfg }) {
@@ -52,6 +63,7 @@ export function ZNav({ page, cfg }) {
           <Link to="/swap" className="zb zb-gold zb-sm hide-sm">
             Buy {TICK}
           </Link>
+          <XLink />
           <Link to={page === 'app' ? '/' : '/app'} className="zb zb-line zb-sm hide-xs">
             {page === 'app' ? 'Home' : 'My vault'}
           </Link>
@@ -624,7 +636,7 @@ export function StatusBoard({ cfg, s }) {
   const lines = [
     ['ok', 'site', 'online'],
     [api ? 'ok' : '..', 'vault api', api ? 'online' : brand.apiUrl ? 'unreachable, retrying' : 'connects at launch'],
-    [cfg?.tokenMint ? 'ok' : '..', 'contract', cfg?.tokenMint ? short(cfg.tokenMint) : 'waiting for the CA'],
+    [cfg?.tokenMint ? 'ok' : '..', 'contract', cfg?.tokenMint ? short(cfg.tokenMint) : caOf(cfg) ? `${short(caOf(cfg))} · launching on Pump.fun` : 'waiting for the CA'],
     [s?.snapshotAt ? 'ok' : '..', 'holder watcher', s?.snapshotAt ? `last snapshot ${Math.max(0, Math.round((Date.now() - s.snapshotAt) / 60000))}m ago` : `armed, snapshots every ${cfg?.cycleMinutes || 5} min once the CA is set`],
     [cfg?.live ? 'ok' : '..', 'payouts', cfg?.live ? (cfg.paused ? 'paused by the team' : `every ${cfg.cycleMinutes} min`) : 'first cycle 5 min after launch'],
     ['test', 'buyback + burn', 'passes in tests on SPL and Token-2022, live with the first fees'],
@@ -721,7 +733,7 @@ export function CopyCA({ mint }) {
       }}
     >
       <b>CA</b>
-      <span className="mono">{short(mint)}</span>
+      <span className="mono zca-v">{mint}</span>
       <Icon name={ok ? 'check' : 'copy'} size={14} />
     </button>
   );

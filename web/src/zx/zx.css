@@ -98,6 +98,7 @@ body { background: transparent; }
 .zb-line:hover { background: rgba(255, 255, 255, 0.09); }
 .zb-lg { height: 56px; padding: 0 26px; font-size: 16.5px; border-radius: 14px; }
 .zb-sm { height: 38px; padding: 0 15px; font-size: 14px; border-radius: 10px; }
+.zn-x { width: 38px; padding: 0; justify-content: center; }
 
 /* ---------- liquid glass ---------- */
 .zx-glass {
@@ -241,6 +242,9 @@ body { background: transparent; }
   color: var(--z-ink);
   cursor: pointer;
 }
+.zh-copy { min-width: 0; }
+.zca { max-width: 100%; min-width: 0; }
+.zca-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zca b { font: 400 12px/1 var(--zf-pixel); padding: 4px 6px; border-radius: 5px; background: var(--z-ink); color: var(--z-black); }
 .zh-clock { position: relative; aspect-ratio: 1; width: 100%; max-width: 600px; justify-self: end; }
 
@@ -649,6 +653,7 @@ body { background: transparent; }
 }
 @media (max-width: 420px) {
   .zn-right .zb-line { display: none; }
+  .zn-right .zn-x { display: inline-flex; }
 }
 @media (prefers-reduced-motion: reduce) {
   .zt-track, .zg-field::after, .zc-head-halo, .s-wait, .ze-caret, .zh-state::before { animation: none !important; }

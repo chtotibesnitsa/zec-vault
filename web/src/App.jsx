@@ -5,7 +5,7 @@ import { ZHome, ZLive, ZSwap, ZHow, ZBoards } from './zx/pages.jsx';
 import { Ambient, detectLite, useDepth } from './glass.jsx';
 import { CoinDrop, FeeSplit, FriendsOrbit, HoldSafe, NameCard, SwapCubes, TokenCoin, ZCoin } from './obj3d.jsx';
 import StillScene from './stills.jsx';
-import { brand, fill, rewardLabel } from './brand.js';
+import { brand, caOf, fill, rewardLabel } from './brand.js';
 import { api, fmtNum, fmtUsd, solscanAcct, solscanTx, ago, useFeed, usePoll } from './api.js';
 import { CopyChip, Countdown, Counter, eventText, FeedTable, Marquee, Reveal, Toasts, txLink, WalletLink, Win, Wordmark } from './components.jsx';
 import { Px } from './pixel.jsx';
@@ -506,7 +506,7 @@ function HowPage({ cfg, proof }) {
             <Row k="supply" v="1,000,000,000" />
             <Row k="reward paid" v={rewardSym(cfg)} />
             <Row k="payout timer" v={`every ${cfg?.cycleMinutes || 5} minutes`} />
-            <Row k="contract" v={cfg?.tokenMint ? <a className="mono" href={solscanAcct(cfg.tokenMint)} target="_blank" rel="noreferrer">{cfg.tokenMint}</a> : 'revealed at launch'} />
+            <Row k="contract" v={caOf(cfg) ? <a className="mono" href={solscanAcct(caOf(cfg))} target="_blank" rel="noreferrer">{caOf(cfg)}</a> : 'revealed at launch'} />
             <Row k="vault wallet" v={cfg?.treasury ? <a className="mono" href={solscanAcct(cfg.treasury)} target="_blank" rel="noreferrer">{cfg.treasury}</a> : 'revealed at launch'} />
           </dl>
           <TokenCoin ticker={brand.ticker} share={(cfg?.rewardShareBps ?? 8000) / 100} burn={(cfg?.burnBps ?? 1000) / 100} />
@@ -908,10 +908,11 @@ function Estimator({ stats: s, start }) {
 
 function Buy({ cfg }) {
   const mint = cfg?.tokenMint;
+  const ca = caOf(cfg);
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    if (!mint) return;
-    navigator.clipboard?.writeText(mint).then(() => {
+    if (!ca) return;
+    navigator.clipboard?.writeText(ca).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     });
@@ -939,10 +940,10 @@ function Buy({ cfg }) {
           </li>
         ))}
       </ol>
-      <div className={`b11-ca ${mint ? 'is-live' : ''}`}>
+      <div className={`b11-ca ${ca ? 'is-live' : ''}`}>
         <span className="b11-ca-k pixel">contract</span>
-        <span className="b11-ca-v mono">{mint || 'Revealed here the minute it launches'}</span>
-        {mint ? (
+        <span className="b11-ca-v mono">{ca || 'Revealed here the minute it launches'}</span>
+        {ca ? (
           <button className="btn btn-ghost b11-copy" onClick={copy}>
             {copied ? 'Copied' : 'Copy'}
           </button>
