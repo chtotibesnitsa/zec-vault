@@ -506,6 +506,38 @@ for (const [label, programId] of [
       expect(t.balanceOf(t.zec, t.bob)).toBe(3000n);
       expect(t.vault.holder(t.bob.toBase58()).owed).toBe('0');
     });
+
+    it('opens new holder accounts only with SOL above half the gas reserve', async () => {
+      const { svm, newMint, mintTo, balanceOf } = setup(programId);
+      const treasury = Keypair.generate();
+      // 0.03 SOL, reserve 0.05: floor 0.025, so 0.005 SOL pays rent for two new accounts.
+      svm.airdrop(treasury.publicKey, 30_000_000n);
+      const mint = newMint(6);
+      const zec = newMint(8);
+      const fresh = [1, 2, 3, 4].map(() => Keypair.generate().publicKey);
+      const accounts = fresh.map((w, i) => mintTo(mint, w, BigInt(400 - i * 10) * 1_000_000_000n));
+      mintTo(zec, treasury.publicKey, 4_000_000n);
+      const vault = new Vault(fakeState(), {
+        TOKEN_MINT: mint.toBase58(),
+        REWARD_MINT: zec.toBase58(),
+        SOLANA_RPC_URL: 'x',
+        TREASURY_SECRET_KEY: bs58.encode(treasury.secretKey),
+        MIN_HOLD_TOKENS: '1000',
+        CLAIM_EVERY_MINUTES: '100000',
+        GAS_RESERVE_SOL: '0.05',
+      });
+      vault.makeRpc = () => svmRpc(svm, programId, () => accounts);
+      vault.set('last_claim_at', Date.now());
+      vault.set('reward_pool_raw', '4000000');
+      await vault.tick();
+      expect(vault.get('last_error')).toBe('');
+      const paid = fresh.filter((w) => balanceOf(zec, w) > 0n);
+      expect(paid).toHaveLength(2);
+      expect(paid.map(String)).toEqual(fresh.slice(0, 2).map(String)); // biggest first
+      expect(svm.getBalance(treasury.publicKey) >= 25_000_000n).toBe(true);
+      expect(vault.get('rent_wanted_lamports')).toBe(String(2n * 2039280n));
+      expect(vault.holder(fresh[3].toBase58()).owed !== '0').toBe(true);
+    });
   });
 }
 

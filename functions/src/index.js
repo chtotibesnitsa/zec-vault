@@ -6,7 +6,7 @@
 
 import { Identity, IDENTITY_SCHEMA } from './identity.js';
 import { Rpc, TOKEN_PROGRAM, sleep } from './rpc.js';
-import { allocate, buildSnapshot, chunk, fromRaw, parseTrade, selectPayouts, solDelta, toRaw, tokenDelta } from './engine.js';
+import { allocate, buildSnapshot, chunk, fitNewAccounts, fromRaw, parseTrade, selectPayouts, solDelta, swapSpend, toRaw, tokenDelta } from './engine.js';
 import {
   buildBurnTx,
   buildBuyTx,
@@ -22,6 +22,7 @@ import {
 } from './solana.js';
 
 const LAMPORTS = 1_000_000_000;
+const ACCOUNT_RENT = 2039280n; // rent-exempt minimum of a 165-byte token account
 
 function cfg(env) {
   const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
@@ -501,7 +502,8 @@ export class Vault {
       const balance = BigInt(await rpc.getBalance(me));
       const budget = this.big('holders_budget_lamports');
       const spendable = balance > reserve ? balance - reserve : 0n;
-      const spend = budget < spendable ? budget : spendable;
+      // Rent for holders' first reward token accounts stays as SOL for the pay stage.
+      const spend = swapSpend({ budget, spendable, rentWanted: this.big('rent_wanted_lamports') });
       if (spend >= minSpend) {
         const built = c.rewardMint
           ? await buildJupiterTx(rpc, signer, { outputMint: c.rewardMint, lamports: spend, slippageBps: Math.round(c.slippage * 100), apiBase: c.jupBase, apiKey: c.jupKey })
@@ -562,12 +564,20 @@ export class Vault {
     }
     let held = await this.rewardBalance(rpc, me, rewardMint);
     if (!c.rewardMint) held -= this.big('burn_owed_raw');
-    picks = await this.skipCostlyNewAccounts(rpc, c, picks, rewardMint, rewardProgram);
+    const exists = await this.rewardAccountsExist(rpc, picks, rewardMint, rewardProgram);
+    picks = this.skipCostlyNewAccounts(c, picks, exists);
     picks = picks.filter((p) => {
       if (p.amount > held) return false;
       held -= p.amount;
       return true;
     });
+    // Opening a holder's first token account costs rent. Open only as many as the
+    // wallet can pay for while keeping half the gas reserve, so claims and fees
+    // always have SOL. The rest stay owed; the next swap holds their rent back.
+    const floor = BigInt(Math.round(c.gasReserveSol * LAMPORTS)) / 2n;
+    const fit = fitNewAccounts(picks, exists, BigInt(await rpc.getBalance(me)) - floor, ACCOUNT_RENT);
+    picks = fit.picks;
+    this.set('rent_wanted_lamports', fit.wanted.toString());
     for (const batch of chunk(picks, c.perTx)) {
       const items = batch.map((it) => ({ wallet: it.wallet, amount: it.amount.toString() }));
       const built = await buildPayoutTx(rpc, signer, { rewardMint, rewardProgram, decimals: rewardDecimals, items, microLamports: c.microLamports });
@@ -647,7 +657,7 @@ export class Vault {
   // Drops payouts to wallets that have no reward token account yet when the
   // amount is worth less than opening one costs. They stay owed and are paid
   // once their balance has grown. Unknown price (no buy yet) = no filter.
-  async skipCostlyNewAccounts(rpc, c, picks, rewardMint, rewardProgram) {
+  skipCostlyNewAccounts(c, picks, exists) {
     if (!picks.length || !c.newAccountRentX || !c.rewardMint) return picks;
     let rate;
     try {
@@ -656,17 +666,19 @@ export class Vault {
       rate = null;
     }
     if (!rate || BigInt(rate.lamports) <= 0n) return picks;
-    const rentLamports = 2039280n; // rent-exempt minimum of a 165-byte token account
-    const minRaw = (rentLamports * BigInt(rate.raw) * BigInt(Math.round(c.newAccountRentX * 100))) / (BigInt(rate.lamports) * 100n);
-    const small = picks.filter((p) => p.amount < minRaw);
-    if (!small.length) return picks;
+    const minRaw = (ACCOUNT_RENT * BigInt(rate.raw) * BigInt(Math.round(c.newAccountRentX * 100))) / (BigInt(rate.lamports) * 100n);
+    return picks.filter((p) => p.amount >= minRaw || exists.has(p.wallet));
+  }
+
+  // Which of these wallets already have a reward token account.
+  async rewardAccountsExist(rpc, picks, rewardMint, rewardProgram) {
     const exists = new Set();
-    for (const group of chunk(small, 100)) {
+    for (const group of chunk(picks, 100)) {
       const atas = group.map((p) => ataAddress(rewardMint, p.wallet, rewardProgram));
       const r = await rpc.call('getMultipleAccounts', [atas, { encoding: 'base64', dataSlice: { offset: 0, length: 0 }, commitment: 'confirmed' }]);
       r.value.forEach((acc, i) => acc && exists.add(group[i].wallet));
     }
-    return picks.filter((p) => p.amount >= minRaw || exists.has(p.wallet));
+    return exists;
   }
 
   async rewardBalance(rpc, owner, mint) {
@@ -895,6 +907,7 @@ export class Vault {
         lastDropped: this.get('last_dropped'),
         pending: this.get('pending') ? JSON.parse(this.get('pending')) : null,
         burnOwed: this.get('burn_owed_raw', '0'),
+        rentWantedSol: Number(this.big('rent_wanted_lamports')) / LAMPORTS,
         stats: await this.stats(),
       });
     }

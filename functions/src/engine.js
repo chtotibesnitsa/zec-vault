@@ -50,6 +50,33 @@ export function selectPayouts(owed, minPayoutRaw, maxRecipients) {
   return list.slice(0, maxRecipients);
 }
 
+// Keeps payouts whose wallet already has a reward token account, and new
+// accounts only while `allowed` lamports cover their rent. Returns what the
+// skipped ones would have cost, so the next swap can hold that SOL back.
+export function fitNewAccounts(picks, exists, allowed, rent) {
+  let left = allowed;
+  let wanted = 0n;
+  const out = [];
+  for (const p of picks) {
+    if (exists.has(p.wallet)) out.push(p);
+    else if (left >= rent) {
+      out.push(p);
+      left -= rent;
+    } else wanted += rent;
+  }
+  return { picks: out, wanted };
+}
+
+// Lamports to swap into the reward token: the holders' budget minus rent that
+// payouts are waiting on (at most half the budget), never above `spendable`.
+export function swapSpend({ budget, spendable, rentWanted }) {
+  if (budget <= 0n) return 0n;
+  const half = budget / 2n;
+  const hold = rentWanted < half ? rentWanted : half;
+  const want = budget - hold;
+  return want < spendable ? want : spendable < 0n ? 0n : spendable;
+}
+
 export function chunk(arr, n) {
   const out = [];
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));

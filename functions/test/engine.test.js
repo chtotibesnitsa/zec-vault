@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocate, buildSnapshot, fromRaw, parseTrade, selectPayouts, toRaw } from '../src/engine.js';
+import { allocate, buildSnapshot, fitNewAccounts, fromRaw, parseTrade, selectPayouts, swapSpend, toRaw } from '../src/engine.js';
 
 const MINT = 'Mint1111111111111111111111111111111111111111';
 
@@ -100,5 +100,32 @@ describe('trade parsing', () => {
     expect(parseTrade(tx({ signer: 's', preTok: 500, postTok: 0, preSol: 1e9, postSol: 1e9 - 5000 }), MINT)).toBeNull();
     expect(parseTrade(tx({ signer: 'b', preTok: 0, postTok: 5, preSol: 2e9, postSol: 1e9, err: { x: 1 } }), MINT)).toBeNull();
     expect(parseTrade(tx({ signer: 'b', preTok: 0, postTok: 5, preSol: 2e9, postSol: 1e9 }), MINT, { ignore: new Set(['b']) })).toBeNull();
+  });
+});
+
+describe('rent for new holder token accounts', () => {
+  const RENT = 2039280n;
+  it('opens only as many new accounts as the SOL above the floor pays for', () => {
+    const picks = [
+      { wallet: 'a', amount: 9n },
+      { wallet: 'b', amount: 8n },
+      { wallet: 'c', amount: 7n },
+      { wallet: 'd', amount: 6n },
+    ];
+    const exists = new Set(['b']);
+    const { picks: out, wanted } = fitNewAccounts(picks, exists, RENT * 2n + 1000n, RENT);
+    expect(out.map((p) => p.wallet)).toEqual(['a', 'b', 'c']);
+    expect(wanted).toBe(RENT);
+  });
+  it('pays existing accounts even with no SOL to spare', () => {
+    const { picks: out, wanted } = fitNewAccounts([{ wallet: 'a', amount: 1n }, { wallet: 'b', amount: 1n }], new Set(['b']), -5n, RENT);
+    expect(out.map((p) => p.wallet)).toEqual(['b']);
+    expect(wanted).toBe(RENT);
+  });
+  it('holds back wanted rent from the swap, at most half the budget', () => {
+    expect(swapSpend({ budget: 100n, spendable: 1000n, rentWanted: 30n })).toBe(70n);
+    expect(swapSpend({ budget: 100n, spendable: 1000n, rentWanted: 500n })).toBe(50n);
+    expect(swapSpend({ budget: 100n, spendable: 40n, rentWanted: 0n })).toBe(40n);
+    expect(swapSpend({ budget: -10n, spendable: 1000n, rentWanted: 0n })).toBe(0n);
   });
 });

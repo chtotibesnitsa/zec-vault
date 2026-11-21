@@ -112,7 +112,7 @@ export class Rpc {
 }
 
 export const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-export const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PeEsN7J9ScAp3T';
+export const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 export const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 
 export function sleep(ms) {
