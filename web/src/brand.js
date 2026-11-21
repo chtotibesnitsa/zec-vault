@@ -46,7 +46,7 @@ const BRANDS = {
     domain: 'zatoshi.live',
     xHandle: 'Zatvault',
     // Contract address, shown before the backend has it. The backend's wins.
-    ca: '3Jj7HJBvgXhwRGWAgyNRJ5x91pTtjtRp9y1kkMUfpump',
+    ca: '75cjQd4dRX7qicrF3m9Nejy2xwmFSRqHvTMRz9nspump',
     coin: 'ZEC',
     chainName: 'Zcash',
     accent: '#e9b44c',
