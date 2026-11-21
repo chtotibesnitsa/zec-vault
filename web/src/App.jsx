@@ -922,7 +922,7 @@ function Buy({ cfg }) {
     ['DexScreener', 'Chart, pairs and volume', mint && `https://dexscreener.com/solana/${mint}`, 'vault'],
   ];
   const steps = [
-    ['Get a Solana wallet', 'Phantom, Solflare or Backpack. Free, takes a minute, and you keep the keys.', 'people'],
+    ['Get a Solana wallet', 'Phantom, MetaMask, Solflare or Backpack. Free, takes a minute, and you keep the keys.', 'people'],
     ['Add some SOL', 'Buy SOL on any exchange and send it to your wallet address.', 'vault'],
     [`Swap for $${brand.ticker}`, 'Use the swap above at 0%, or any venue below.', 'trade'],
     ['Just hold', `Your wallet is picked up in the next snapshot and paid every ${cfg?.cycleMinutes || 5} minutes.`, 'pay'],

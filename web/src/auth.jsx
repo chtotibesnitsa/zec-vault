@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { brand } from './brand.js';
 import { apiSend, short } from './api.js';
-import { connect, deepLinks, isMobile, listWallets, onWalletsChange } from './wallet.js';
+import { connect, deepLinks, isMobile, listWallets, metaMaskStatus, METAMASK_DOWNLOAD, onWalletsChange } from './wallet.js';
 import { Px } from './pixel.jsx';
 
 const Ctx = createContext(null);
@@ -168,13 +168,19 @@ export function AccountButton() {
 function ConnectModal({ onClose }) {
   const { me, conn, signIn, saveName, linkX, unlinkX, logout } = useAuth();
   const [wallets, setWallets] = useState(listWallets);
+  const [mm, setMm] = useState(metaMaskStatus);
+  const [mmHelp, setMmHelp] = useState(false);
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [name, setName] = useState(me?.username || '');
 
   useEffect(() => {
-    const off = onWalletsChange(() => setWallets(listWallets()));
-    const t = setTimeout(() => setWallets(listWallets()), 400);
+    const sync = () => {
+      setWallets(listWallets());
+      setMm(metaMaskStatus());
+    };
+    const off = onWalletsChange(sync);
+    const t = setTimeout(sync, 400);
     const esc = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', esc);
     return () => {
@@ -232,7 +238,26 @@ function ConnectModal({ onClose }) {
                     <span className="pixel muted">{busy === w.name ? 'check wallet…' : 'sign in'}</span>
                   </button>
                 ))}
+                {mm === 'no-solana' && (
+                  <button className="wallet-btn" onClick={() => setMmHelp((v) => !v)} aria-expanded={mmHelp}>
+                    <Px name="wallet" size={22} />
+                    <span>MetaMask</span>
+                    <span className="pixel muted">turn on solana</span>
+                  </button>
+                )}
+                {mm === 'missing' && !isMobile() && (
+                  <a className="wallet-btn" href={METAMASK_DOWNLOAD} target="_blank" rel="noreferrer">
+                    <Px name="wallet" size={22} />
+                    <span>MetaMask</span>
+                    <span className="pixel muted">install ↗</span>
+                  </a>
+                )}
               </div>
+              {mm === 'no-solana' && mmHelp && (
+                <p className="small muted">
+                  MetaMask is installed but has no Solana account yet. Update MetaMask, open the account menu, choose <b>Add account</b> → <b>Solana</b>, then reload this page.
+                </p>
+              )}
               {!wallets.length && (
                 <div className="nowallet">
                   <p className="small">No Solana wallet found in this browser.</p>

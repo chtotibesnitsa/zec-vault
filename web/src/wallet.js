@@ -15,7 +15,25 @@ function add(w) {
   listeners.forEach((fn) => fn());
 }
 
+// MetaMask's EVM side, announced through EIP-6963. Tells "installed but no
+// Solana account yet" apart from "not installed". rdns is MetaMask's own id,
+// so other wallets that set ethereum.isMetaMask for compatibility don't count.
+let metaMaskEvm = false;
+
 if (typeof window !== 'undefined') {
+  window.addEventListener('eip6963:announceProvider', (e) => {
+    if (e.detail?.info?.rdns === 'io.metamask' || e.detail?.info?.rdns === 'io.metamask.flask') {
+      if (!metaMaskEvm) {
+        metaMaskEvm = true;
+        listeners.forEach((fn) => fn());
+      }
+    }
+  });
+  try {
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+  } catch {
+    /* old browsers */
+  }
   const api = { register: (...ws) => (ws.forEach(add), () => {}) };
   window.addEventListener('wallet-standard:register-wallet', (e) => {
     try {
@@ -40,9 +58,23 @@ function legacy() {
   return out;
 }
 
+const isMetaMaskName = (n) => /metamask/i.test(n || '');
+
+// MetaMask first when its Solana account is there, then the rest.
 export function listWallets() {
-  return [...found.values(), ...legacy()];
+  const all = [...found.values(), ...legacy()];
+  return [...all.filter((w) => isMetaMaskName(w.name)), ...all.filter((w) => !isMetaMaskName(w.name))];
 }
+
+// 'ready': MetaMask's Solana account is available to connect.
+// 'no-solana': MetaMask is installed but has no Solana account turned on.
+// 'missing': MetaMask isn't in this browser.
+export function metaMaskStatus() {
+  if ([...found.keys()].some(isMetaMaskName)) return 'ready';
+  return metaMaskEvm ? 'no-solana' : 'missing';
+}
+
+export const METAMASK_DOWNLOAD = 'https://metamask.io/download/';
 
 export function onWalletsChange(fn) {
   listeners.add(fn);
@@ -80,6 +112,16 @@ function b58(bytes) {
   return out;
 }
 
+// Mainnet as the wallet names it: 'solana:mainnet' (Wallet Standard) or the
+// CAIP-2 genesis-hash form some wallets, MetaMask among them, may report.
+const MAINNET_CAIP = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
+function mainnetChain(account, wallet) {
+  const chains = [...(account.chains || []), ...(wallet.chains || [])];
+  if (chains.includes('solana:mainnet')) return 'solana:mainnet';
+  if (chains.includes(MAINNET_CAIP)) return MAINNET_CAIP;
+  return 'solana:mainnet';
+}
+
 // Connects and returns { address, signMessage(text) -> base64 signature }.
 export async function connect(w) {
   if (w.kind === 'standard') {
@@ -98,7 +140,7 @@ export async function connect(w) {
       async signAndSend(bytes) {
         const f = w.raw.features['solana:signAndSendTransaction'];
         if (!f) throw new Error('This wallet cannot send transactions from here');
-        const out = await f.signAndSendTransaction({ account, transaction: bytes, chain: 'solana:mainnet' });
+        const out = await f.signAndSendTransaction({ account, transaction: bytes, chain: mainnetChain(account, w.raw) });
         const first = Array.isArray(out) ? out[0] : out;
         return b58(first.signature);
       },
@@ -116,7 +158,7 @@ export async function connect(w) {
     },
     canSwap: false,
     async signAndSend() {
-      throw new Error('Open this page in Phantom, Solflare or Backpack to swap');
+      throw new Error('Open this page in Phantom, MetaMask, Solflare or Backpack to swap');
     },
     disconnect: () => p.disconnect?.(),
   };
