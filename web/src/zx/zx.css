@@ -175,6 +175,13 @@ body { background: transparent; }
 }
 .zn-dock { display: none; }
 
+/* ---------- CA bar ---------- */
+.zcab { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 40px; padding: 6px var(--zpad); background: var(--z-gold, #e9b44c); color: #0a0b0c; }
+.zcab-k { font: 400 12px/1 var(--zf-pixel); padding: 4px 6px; border-radius: 5px; background: #0a0b0c; color: var(--z-gold, #e9b44c); }
+.zcab-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 14px/1 var(--zf-mono); cursor: pointer; user-select: all; }
+.zcab-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: #0a0b0c; color: #fff; font: 600 13px/1 var(--zf-body, inherit); cursor: pointer; }
+.zcab-btn:hover { background: #222; }
+
 /* ---------- ticker ---------- */
 .zt {
   position: relative;

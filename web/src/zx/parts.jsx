@@ -22,6 +22,28 @@ export const PAGES = [
   { key: 'boards', to: '/boards', label: 'Leaderboards', short: 'Boards', icon: 'boards' },
 ];
 
+// Gold strip at the very top of every page: the contract address and a Copy button.
+export function CABar({ cfg }) {
+  const ca = caOf(cfg);
+  const [ok, setOk] = useState(false);
+  if (!ca) return null;
+  const copy = () => {
+    navigator.clipboard?.writeText(ca);
+    setOk(true);
+    setTimeout(() => setOk(false), 1400);
+  };
+  return (
+    <div className="zcab" role="region" aria-label="Contract address">
+      <b className="zcab-k">CA</b>
+      <span className="zcab-v mono" onClick={copy}>{ca}</span>
+      <button className="zcab-btn" onClick={copy}>
+        <Icon name={ok ? 'check' : 'copy'} size={14} />
+        <span>{ok ? 'Copied' : 'Copy'}</span>
+      </button>
+    </div>
+  );
+}
+
 // The project's X account, as the X mark.
 export function XLink({ size = 15 }) {
   return (

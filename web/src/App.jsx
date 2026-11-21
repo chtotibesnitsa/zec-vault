@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import LiquidMap from './zx/bg.jsx';
-import { ZNav, Ticker, ZFooter } from './zx/parts.jsx';
+import { CABar, ZNav, Ticker, ZFooter } from './zx/parts.jsx';
 import { ZHome, ZLive, ZSwap, ZHow, ZBoards } from './zx/pages.jsx';
 import { Ambient, detectLite, useDepth } from './glass.jsx';
 import { CoinDrop, FeeSplit, FriendsOrbit, HoldSafe, NameCard, SwapCubes, TokenCoin, ZCoin } from './obj3d.jsx';
@@ -144,6 +144,7 @@ export default function App() {
     <div className={`site zx v-${brand.key}`} style={{ "--n": brand.name.length }}>
       <LiquidMap />
       <div className="zx-grid" aria-hidden="true" />
+      <CABar cfg={cfg} />
       <ZNav page={page} cfg={cfg} />
       <Ticker s={stats.data} cfg={cfg} />
       <div className="page" key={page}>
