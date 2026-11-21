@@ -114,8 +114,10 @@ export async function buildBuyTx(rpc, signer, { mint, sol, slippage, priorityFee
   return finish(rpc, signer, tx, await lastValidSoon(rpc));
 }
 
-// Swap of SOL into another reward token via Jupiter.
-export async function buildJupiterTx(rpc, signer, { outputMint, lamports, slippageBps, apiBase, apiKey }) {
+// Swap of SOL into a token via Jupiter (no swap fee). Tight slippage: the
+// quote already prices in impact, and a wide tolerance only invites sandwich
+// bots. Priority fee is capped; a swap that misses is simply retried.
+export async function buildJupiterTx(rpc, signer, { outputMint, lamports, slippageBps, apiBase, apiKey, priorityLevel = 'medium', maxPriorityLamports = 50000 }) {
   const headers = { 'content-type': 'application/json' };
   if (apiKey) headers['x-api-key'] = apiKey;
   const q = new URL(`${apiBase}/quote`);
@@ -123,9 +125,11 @@ export async function buildJupiterTx(rpc, signer, { outputMint, lamports, slippa
   q.searchParams.set('outputMint', outputMint);
   q.searchParams.set('amount', lamports.toString());
   q.searchParams.set('slippageBps', String(slippageBps));
+  q.searchParams.set('restrictIntermediateTokens', 'true');
   const quoteRes = await fetch(q, { headers });
   if (!quoteRes.ok) throw new Error(`Jupiter quote HTTP ${quoteRes.status}`);
   const quoteResponse = await quoteRes.json();
+  if (!quoteResponse.outAmount || quoteResponse.outAmount === '0') throw new Error(`Jupiter found no route to ${outputMint}`);
   const swapRes = await fetch(`${apiBase}/swap`, {
     method: 'POST',
     headers,
@@ -134,7 +138,7 @@ export async function buildJupiterTx(rpc, signer, { outputMint, lamports, slippa
       quoteResponse,
       wrapAndUnwrapSol: true,
       dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: { priorityLevelWithMaxLamports: { priorityLevel: 'high', maxLamports: 200000 } },
+      prioritizationFeeLamports: { priorityLevelWithMaxLamports: { priorityLevel, maxLamports: maxPriorityLamports } },
     }),
   });
   if (!swapRes.ok) throw new Error(`Jupiter swap HTTP ${swapRes.status}`);

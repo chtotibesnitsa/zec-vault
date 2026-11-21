@@ -49,7 +49,9 @@ Sign up at helius.dev (free plan) and copy the **Mainnet RPC URL**. The public S
 | `MIN_HOLD_TOKENS` | Text | `100000` (0.01% of supply) |
 | `EXCLUDE_WALLETS` | Text | comma-separated wallets never to pay (your dev or team wallets) |
 
-Optional: `CYCLE_MINUTES` (5), `CLAIM_EVERY_MINUTES` (30), `GAS_RESERVE_SOL` (0.05), `MIN_CYCLE_SOL` (0.02), `MIN_PAYOUT` (0), `MAX_RECIPIENTS_PER_CYCLE` (60), `SLIPPAGE_PCT` (15), `NEW_ACCOUNT_MIN_RENT_X` (1), `JUPITER_API_KEY`.
+Optional: `CYCLE_MINUTES` (5), `CLAIM_EVERY_MINUTES` (30), `GAS_RESERVE_SOL` (0.05), `MIN_CYCLE_SOL` (0.02), `MIN_PAYOUT` (0), `MAX_RECIPIENTS_PER_CYCLE` (60; 30 in `wrangler.jsonc` for the free plan), `REWARD_SLIPPAGE_BPS` (100 = 1%, SOL → ZEC), `BURN_SLIPPAGE_BPS` (300), `JUPITER_MAX_PRIORITY_LAMPORTS` (50000), `PRIORITY_FEE_SOL` (0.00001, claims), `SLIPPAGE_PCT` (5, PumpPortal fallback), `NEW_ACCOUNT_MIN_RENT_X` (1), `JUPITER_API_KEY`.
+
+All swaps go through Jupiter, which charges no swap fee: SOL → ZEC for holders, and SOL → $ZATS for the burn (Jupiter routes the Pump.fun curve and PumpSwap). PumpPortal is used only to claim fees, and for a burn buy when Jupiter has no route. Slippage is tight on purpose: the quote already includes price impact, and a wide tolerance only lets sandwich bots take the difference.
 
 Get a free `JUPITER_API_KEY` (Secret) at portal.jup.ag: Jupiter is retiring its keyless API, and with a key the worker uses `api.jup.ag` for the SOL → ZEC swap.
 

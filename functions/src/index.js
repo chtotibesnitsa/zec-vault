@@ -41,8 +41,16 @@ function cfg(env) {
     minPayout: env.MIN_PAYOUT || '0',
     maxRecipients: Math.max(1, num(env.MAX_RECIPIENTS_PER_CYCLE, 60)),
     perTx: Math.max(1, Math.min(10, num(env.TRANSFERS_PER_TX, 8))),
-    slippage: num(env.SLIPPAGE_PCT, 15),
-    priorityFee: num(env.PRIORITY_FEE_SOL, 0.00005),
+    // PumpPortal fallback only (burn buys when Jupiter has no route).
+    slippage: num(env.SLIPPAGE_PCT, 5),
+    // Jupiter swaps. SOL -> ZEC moves the price ~0.03% even at 1 SOL, so 1% is
+    // ample; wider only lets sandwich bots take the difference.
+    rewardSlippageBps: Math.max(10, num(env.REWARD_SLIPPAGE_BPS, 100)),
+    burnSlippageBps: Math.max(10, num(env.BURN_SLIPPAGE_BPS, 300)),
+    jupPriorityLevel: env.JUPITER_PRIORITY_LEVEL || 'medium',
+    jupMaxPriorityLamports: Math.max(0, num(env.JUPITER_MAX_PRIORITY_LAMPORTS, 50000)),
+    // Claims are not time-sensitive, so they pay a small priority fee.
+    priorityFee: num(env.PRIORITY_FEE_SOL, 0.00001),
     microLamports: num(env.PRIORITY_MICROLAMPORTS, 50000),
     exclude: new Set((env.EXCLUDE_WALLETS || '').split(',').map((s) => s.trim()).filter(Boolean)),
     // The keyless lite host is being retired; with a key (free at portal.jup.ag) use the main host.
@@ -476,6 +484,21 @@ export class Vault {
     }
   }
 
+  jupOpts(c, outputMint, lamports, slippageBps) {
+    return { outputMint, lamports, slippageBps, apiBase: c.jupBase, apiKey: c.jupKey, priorityLevel: c.jupPriorityLevel, maxPriorityLamports: c.jupMaxPriorityLamports };
+  }
+
+  // Buys the vault's own token. Jupiter routes the Pump.fun curve and PumpSwap
+  // with no swap fee; PumpPortal (which charges per trade) is the fallback.
+  async buildOwnTokenBuy(rpc, signer, c, lamports) {
+    try {
+      return await buildJupiterTx(rpc, signer, this.jupOpts(c, c.mint, lamports, c.burnSlippageBps));
+    } catch (e) {
+      this.set('last_route_note', `${new Date().toISOString()} Jupiter: ${e.message}; used PumpPortal`);
+      return buildBuyTx(rpc, signer, { mint: c.mint, sol: Number(lamports) / LAMPORTS, slippage: c.slippage, priorityFee: c.priorityFee });
+    }
+  }
+
   // Returns false when the cycle should stop (something is still pending).
   async cycleStage(rpc, c, stage) {
     if (!(await this.resolvePending(rpc))) throw new Error('waiting for an earlier transaction to confirm or expire');
@@ -506,8 +529,8 @@ export class Vault {
       const spend = swapSpend({ budget, spendable, rentWanted: this.big('rent_wanted_lamports') });
       if (spend >= minSpend) {
         const built = c.rewardMint
-          ? await buildJupiterTx(rpc, signer, { outputMint: c.rewardMint, lamports: spend, slippageBps: Math.round(c.slippage * 100), apiBase: c.jupBase, apiKey: c.jupKey })
-          : await buildBuyTx(rpc, signer, { mint: c.mint, sol: Number(spend) / LAMPORTS, slippage: c.slippage, priorityFee: c.priorityFee });
+          ? await buildJupiterTx(rpc, signer, this.jupOpts(c, c.rewardMint, spend, c.rewardSlippageBps))
+          : await this.buildOwnTokenBuy(rpc, signer, c, spend);
         await this.submit(rpc, 'buyback', { spend: spend.toString(), mint: rewardMint }, built);
       }
       return true;
@@ -520,7 +543,7 @@ export class Vault {
       const avail = bal > reserve ? bal - reserve : 0n;
       const burnSpend = burnBudget < avail ? burnBudget : avail;
       if (burnSpend >= minSpend) {
-        const built = await buildBuyTx(rpc, signer, { mint: c.mint, sol: Number(burnSpend) / LAMPORTS, slippage: c.slippage, priorityFee: c.priorityFee });
+        const built = await this.buildOwnTokenBuy(rpc, signer, c, burnSpend);
         await this.submit(rpc, 'burnbuy', { spend: burnSpend.toString(), mint: c.mint }, built);
       }
       // 2c. Burn exactly what was bought for burning (also retries an earlier failed burn).
@@ -905,6 +928,7 @@ export class Vault {
         lastClaimError: this.get('last_claim_error'),
         lastFeedError: this.get('last_feed_error'),
         lastDropped: this.get('last_dropped'),
+        lastRouteNote: this.get('last_route_note'),
         pending: this.get('pending') ? JSON.parse(this.get('pending')) : null,
         burnOwed: this.get('burn_owed_raw', '0'),
         rentWantedSol: Number(this.big('rent_wanted_lamports')) / LAMPORTS,
